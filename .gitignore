@@ -50,3 +50,5 @@ app.*.map.json
 # Local path overrides
 pubspec_overrides.yaml
 
+# Release artifacts (uploaded to GitHub Releases)
+/dist/
