@@ -486,20 +486,6 @@ class _ThreadPageState extends State<ThreadPage> {
         MediaQuery.paddingOf(context).bottom + 96,
       ),
       children: [
-        if (_thread.displayTitle.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              _thread.displayTitle,
-              textAlign: TextAlign.center,
-              // 正文大小、仅加粗：标题不再比楼层正文更抢眼，只靠字重分层。
-              style: AppTextStyle.body
-                  .of(context)
-                  .copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
         if (_firstFloor != null) ...[
           PostTile(
             key: ValueKey('post-1-${_firstFloor!.id}'),
@@ -507,6 +493,8 @@ class _ThreadPageState extends State<ThreadPage> {
             lzUserId: _lzUserId,
             isFirstFloor: true,
             replyCount: _thread.replyNum,
+            // 标题并进主楼正文首行，不再单独占一块。
+            leadingTitle: _thread.displayTitle,
             onAuthorTap: _firstFloor!.author.id > 0
                 ? () => openUserProfile(
                     context,

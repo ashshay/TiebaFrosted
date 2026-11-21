@@ -78,7 +78,9 @@ class ProfileHeaderLayout {
     );
 
     final nameScale = lerpDouble(1.0, 17.0 / 22.0, ease)!;
-    final nameHeight = textScale * 22.0 * nameScale * 1.3;
+    // 高度按未缩放的 title2 行高算：Transform.scale 只改视觉、不改布局，
+    // 若跟着 nameScale 一起缩，折叠时 Positioned 会比文字矮，底部被 ClipRect 切掉。
+    final nameHeight = textScale * 28.0;
     final nameShift = Curves.easeOutCubic.transform(
       ((p - 0.40) / 0.45).clamp(0.0, 1.0),
     );
@@ -156,8 +158,9 @@ class ProfileHeaderDelegate extends SliverPersistentHeaderDelegate {
   static const coverRange = 0.62;
   static const actionWidth = 44.0;
 
+  /// 展开态名字占的行高，与 [ProfileHeaderLayout] 里的 nameHeight 同源。
   static double nameLineOf(BuildContext context) =>
-      MediaQuery.textScalerOf(context).scale(22.0) * 1.3;
+      MediaQuery.textScalerOf(context).scale(28.0);
 
   static double expandedExtent(double topInset, double nameLine) =>
       topInset + coverHeight + avatarOuter - overlap + _nameGap + nameLine + 10;

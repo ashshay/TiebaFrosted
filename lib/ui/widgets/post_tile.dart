@@ -23,6 +23,7 @@ class PostTile extends StatelessWidget {
     this.lzUserId = 0,
     this.isFirstFloor = false,
     this.replyCount,
+    this.leadingTitle = '',
     this.onAuthorTap,
     this.onAgreeTap,
     this.onReplyTap,
@@ -40,6 +41,9 @@ class PostTile extends StatelessWidget {
 
   /// 覆盖回复按钮上的计数。首楼用它显示整贴回复数（主楼本身没有楼中楼）。
   final int? replyCount;
+
+  /// 正文首行的加粗标题；主楼用它承载帖子标题，不再单独占一块。
+  final String leadingTitle;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onAgreeTap;
   final VoidCallback? onReplyTap;
@@ -142,10 +146,22 @@ class PostTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
+          if (leadingTitle.isNotEmpty) ...[
+            Text(
+              leadingTitle,
+              style: AppTextStyle.body
+                  .of(context)
+                  .copyWith(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 6),
+          ],
           TiebaRichContent(
             nodes: post.content,
             hideMedia: settings.hideMedia,
-            style: AppTextStyle.body
+            style: AppTextStyle.subheadline
                 .of(context)
                 .copyWith(color: scheme.onSurface),
             onLinkTap: onLinkTap,
