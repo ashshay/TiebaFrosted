@@ -10,6 +10,7 @@ import '../../data/models.dart';
 import '../../data/native_channels.dart';
 import '../../data/repo.dart';
 import '../../data/settings.dart';
+import '../chrome.dart';
 import '../routes.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -54,6 +55,12 @@ class _ThreadPageState extends State<ThreadPage> {
 
   TiebaThread _thread = const TiebaThread(id: 0);
   TiebaForum _forum = const TiebaForum();
+
+  /// 本页自己的顶栏/底栏收起状态。
+  ///
+  /// 不复用全局 [ChromeController]：那样滚动详情页会把主壳底栏一起藏掉，
+  /// 返回时还得靠 dispose 复位，容易留下脏状态。
+  bool _barHidden = false;
   TiebaPageInfo _pageInfo = const TiebaPageInfo();
   TiebaPost? _firstFloor;
   List<TiebaPost> _posts = [];
@@ -410,6 +417,8 @@ class _ThreadPageState extends State<ThreadPage> {
     return FrostedPage(
       title: title,
       centerTitle: true,
+      hidden: _barHidden,
+      footHidden: _barHidden,
       titleWidget: _ForumTitlePill(
         forumName: _effectiveForumName,
         avatar: _effectiveForumAvatar,
@@ -432,10 +441,17 @@ class _ThreadPageState extends State<ThreadPage> {
         onReplyTap: () => _openReplyEditor(),
         onPageTap: _showThreadActions,
       ),
-      body: FrostedRefresh(
-        topInset: pageTopInset(context),
-        onRefresh: () => _load(page: 1, reset: true),
-        child: _buildBody(context, scheme, settings),
+      body: ChromeScrollListener(
+        onHiddenChanged: (hidden) {
+          if (mounted && hidden != _barHidden) {
+            setState(() => _barHidden = hidden);
+          }
+        },
+        child: FrostedRefresh(
+          topInset: pageTopInset(context),
+          onRefresh: () => _load(page: 1, reset: true),
+          child: _buildBody(context, scheme, settings),
+        ),
       ),
     );
   }

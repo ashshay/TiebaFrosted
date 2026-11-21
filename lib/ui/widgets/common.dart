@@ -469,6 +469,7 @@ class FrostedPage extends StatelessWidget {
     this.leading,
     this.foot,
     this.footActions,
+    this.footHidden = false,
     this.centerTitle = false,
     this.hidden = false,
     this.resizeToAvoidBottomInset,
@@ -483,6 +484,9 @@ class FrostedPage extends StatelessWidget {
   final Widget? leading;
   final Widget? foot;
   final Widget? footActions;
+
+  /// 把 [foot] 移出视野而不改变 body 的布局位置（滚动隐藏用）。
+  final bool footHidden;
   final bool centerTitle;
   final bool hidden;
   final bool? resizeToAvoidBottomInset;
@@ -508,6 +512,7 @@ class FrostedPage extends StatelessWidget {
       ),
       body: body,
       foot: foot,
+      footHidden: footHidden,
       footActions: footActions,
     );
   }

@@ -1,12 +1,17 @@
 import 'package:flutter/foundation.dart';
 
-/// 顶栏/底栏滚动隐藏与双击首页刷新的联动控制器。
+/// 顶栏/底栏滚动隐藏与底栏双击刷新的联动控制器。
+///
+/// 底栏第 1 格「首页」（进吧/发现）与第 2 格「动态」（推荐/关注）各有一个刷新计数，
+/// 页面监听自己的那个，互不干扰。
 class ChromeController extends ChangeNotifier {
   bool _hidden = false;
   int _homeRefreshCount = 0;
+  int _feedRefreshCount = 0;
 
   bool get hidden => _hidden;
   int get homeRefreshCount => _homeRefreshCount;
+  int get feedRefreshCount => _feedRefreshCount;
 
   void setHidden(bool value) {
     if (_hidden == value) return;
@@ -16,6 +21,11 @@ class ChromeController extends ChangeNotifier {
 
   void requestHomeRefresh() {
     _homeRefreshCount++;
+    notifyListeners();
+  }
+
+  void requestFeedRefresh() {
+    _feedRefreshCount++;
     notifyListeners();
   }
 }

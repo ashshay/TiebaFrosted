@@ -7,30 +7,33 @@ import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
 import '../../data/repo.dart';
-import '../chrome.dart';
 import '../routes.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
-import '../widgets/press_scale.dart';
-import '../widgets/refresh.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/thread_card.dart';
 
-/// 发现页：贴吧热议榜 + 热门话题横滑 + 分类热帖。
-class ExplorePage extends StatefulWidget {
-  const ExplorePage({super.key});
+/// 发现视图：贴吧热议榜 + 热门话题横滑 + 分类热帖。
+///
+/// 只出内容，不带自己的顶栏与下拉刷新——它现在是「首页」的一个标签，
+/// 由 [HomePage] 的顶栏统一驱动；刷新时透过 [GlobalKey] 调 [ExploreViewState.reload]。
+class ExploreView extends StatefulWidget {
+  const ExploreView({super.key});
 
   @override
-  State<ExplorePage> createState() => _ExplorePageState();
+  State<ExploreView> createState() => ExploreViewState();
 }
 
-class _ExplorePageState extends State<ExplorePage> {
+class ExploreViewState extends State<ExploreView> {
   HotThreadPageResult? _data;
   String _selectedTabCode = 'all';
   String _selectedTabId = '1';
   bool _loading = true;
   String? _error;
+
+  /// 供外部（下拉刷新 / 双击底栏）重新拉取。
+  Future<void> reload() => _load();
 
   @override
   void initState() {
@@ -66,48 +69,10 @@ class _ExplorePageState extends State<ExplorePage> {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = context.watch<ChromeController>();
     final scheme = context.colorScheme;
     final top = pageTopInset(context);
     final bottom = pageBottomInset(context);
-
-    return PrismScaffold(
-      bar: FrostedAppBar(
-        hidden: chrome.hidden,
-        title: Text(
-          '发现',
-          style: AppTextStyle.title2
-              .of(context)
-              .copyWith(fontWeight: FontWeight.w700),
-        ),
-        actions: [
-          PressScale(
-            scale: 0.92,
-            child: IconButton(
-              onPressed: () => openHotTopicList(context),
-              tooltip: '热议榜',
-              icon: const GlyphIcon(FrostedGlyphs.flame, size: 20),
-            ),
-          ),
-          PressScale(
-            scale: 0.92,
-            child: IconButton(
-              onPressed: () => openSearch(context),
-              tooltip: '搜索',
-              icon: const GlyphIcon(FrostedGlyphs.search, size: 20),
-            ),
-          ),
-        ],
-      ),
-      body: ChromeScrollListener(
-        onHiddenChanged: chrome.setHidden,
-        child: FrostedRefresh(
-          topInset: top,
-          onRefresh: _load,
-          child: _buildBody(context, scheme, top, bottom),
-        ),
-      ),
-    );
+    return _buildBody(context, scheme, top, bottom);
   }
 
   Widget _buildBody(

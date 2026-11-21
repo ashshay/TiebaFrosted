@@ -10,7 +10,7 @@ import '../data/native_channels.dart';
 import '../data/settings.dart';
 import '../data/store.dart';
 import 'chrome.dart';
-import 'pages/explore_page.dart';
+import 'pages/feed_page.dart';
 import 'pages/home_page.dart';
 import 'pages/me_page.dart';
 import 'pages/notifications_page.dart';
@@ -19,7 +19,9 @@ import 'widgets/common.dart';
 import 'widgets/glyphs.dart';
 import 'widgets/remote_image.dart';
 
-/// 应用主壳：四格页面（首页 / 发现 / 消息 / 我的）+ Prism 液态玻璃悬浮底栏。
+/// 应用主壳：四格页面（首页 / 动态 / 消息 / 我的）+ Prism 液态玻璃悬浮底栏。
+///
+/// 「首页」里是 进吧 ⇄ 发现，「动态」里是 推荐 ⇄ 关注；两格各自支持双击刷新。
 class FrostedShell extends StatefulWidget {
   const FrostedShell({super.key});
 
@@ -30,13 +32,15 @@ class FrostedShell extends StatefulWidget {
 class _FrostedShellState extends State<FrostedShell> {
   int _index = 0;
   final GlobalKey _dockKey = GlobalKey();
-  DateTime? _lastHomeTapAt;
+  int? _lastTapIndex;
+  DateTime? _lastTapAt;
   Timer? _longPressTimer;
   Offset? _pressStart;
 
   @override
   void initState() {
     super.initState();
+    _index = context.read<FrostedSettings>().startTab;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_handleInitialDeepLink());
     });
@@ -91,21 +95,31 @@ class _FrostedShellState extends State<FrostedShell> {
     _cancelLongPress();
     final box = _dockKey.currentContext?.findRenderObject();
     if (box is! RenderBox) return;
-    if (_dockIndexAt(box.globalToLocal(event.position), box.size) != 0) {
-      _lastHomeTapAt = null;
+    final index = _dockIndexAt(box.globalToLocal(event.position), box.size);
+    if (index < 0) return;
+    // 只有「首页」与「动态」有可刷新的内容，其余格保持单击切页。
+    if (index > 1) {
+      _lastTapIndex = null;
       return;
     }
     final now = DateTime.now();
-    final last = _lastHomeTapAt;
-    if (last != null &&
-        now.difference(last) <= const Duration(milliseconds: 320)) {
-      _lastHomeTapAt = null;
+    final lastAt = _lastTapAt;
+    if (_lastTapIndex == index &&
+        lastAt != null &&
+        now.difference(lastAt) <= const Duration(milliseconds: 320)) {
+      _lastTapIndex = null;
+      _lastTapAt = null;
       final chrome = context.read<ChromeController>();
       chrome.setHidden(false);
-      if (_index != 0) setState(() => _index = 0);
-      chrome.requestHomeRefresh();
+      if (_index != index) setState(() => _index = index);
+      if (index == 0) {
+        chrome.requestHomeRefresh();
+      } else {
+        chrome.requestFeedRefresh();
+      }
     } else {
-      _lastHomeTapAt = now;
+      _lastTapIndex = index;
+      _lastTapAt = now;
     }
   }
 
@@ -181,7 +195,7 @@ class _FrostedShellState extends State<FrostedShell> {
     final accountKey = store.activeUid ?? 'guest';
     final pages = <Widget>[
       HomePage(key: ValueKey('home-$accountKey')),
-      const ExplorePage(),
+      FeedPage(key: ValueKey('feed-$accountKey')),
       NotificationsPage(key: ValueKey('msg-$accountKey')),
       MePage(key: ValueKey('me-$accountKey')),
     ];
@@ -227,7 +241,7 @@ class _FrostedShellState extends State<FrostedShell> {
                         ),
                         const NavigationDockDestination(
                           glyph: FrostedGlyphs.explore,
-                          label: '发现',
+                          label: '动态',
                         ),
                         const NavigationDockDestination(
                           glyph: FrostedGlyphs.bell,

@@ -26,12 +26,13 @@ class SettingsHabitPage extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: FrostedCard(
               child: SegmentedControl<int>(
-                value: settings.homeDefaultTab,
-                onChanged: settings.setHomeDefaultTab,
+                value: settings.startTab,
+                onChanged: settings.setStartTab,
                 segments: const [
-                  (0, '推荐'),
-                  (1, '进吧'),
-                  (2, '关注'),
+                  (0, '首页'),
+                  (1, '动态'),
+                  (2, '消息'),
+                  (3, '我的'),
                 ],
               ),
             ),

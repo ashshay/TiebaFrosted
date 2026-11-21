@@ -38,8 +38,8 @@ class FrostedSettings extends ChangeNotifier {
   /// 「进吧」页排列：false 为多列网格（原版默认），true 为单列列表。
   bool forumListSingle = false;
 
-  /// 启动时首页停在哪一栏：0 推荐 / 1 进吧 / 2 关注。
-  int homeDefaultTab = 0;
+  /// 启动时停在底栏哪一格：0 首页 / 1 动态 / 2 消息 / 3 我的。
+  int startTab = 0;
 
   // 屏蔽总开关
   bool enableBlock = true;
@@ -86,7 +86,7 @@ class FrostedSettings extends ChangeNotifier {
     hideReply = _prefs.getBool('hide_reply') ?? false;
     hideMedia = _prefs.getBool('hide_media') ?? false;
     forumListSingle = _prefs.getBool('forum_list_single') ?? false;
-    homeDefaultTab = (_prefs.getInt('home_default_tab') ?? 0).clamp(0, 2);
+    startTab = (_prefs.getInt('start_tab') ?? 0).clamp(0, 3);
 
     enableBlock = _prefs.getBool('enable_block') ?? true;
     blockVideoThread = _prefs.getBool('block_video_thread') ?? false;
@@ -197,9 +197,9 @@ class FrostedSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setHomeDefaultTab(int value) async {
-    homeDefaultTab = value.clamp(0, 2);
-    await _prefs.setInt('home_default_tab', homeDefaultTab);
+  Future<void> setStartTab(int value) async {
+    startTab = value.clamp(0, 3);
+    await _prefs.setInt('start_tab', startTab);
     notifyListeners();
   }
 

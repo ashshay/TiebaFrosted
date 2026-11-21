@@ -4,6 +4,7 @@ import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/emoticons.dart';
 import '../../core/html_text.dart';
 import '../../data/models.dart';
 import '../../data/settings.dart';
@@ -309,26 +310,57 @@ class _SubPostPreviewLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.colorScheme;
-    final preview = sub.content
-        .map(
-          (n) => switch (n) {
-            RichTextNode(:final text) => text,
-            RichEmoticonNode(:final name) => '#($name)',
-            RichAtNode(:final text) => text,
-            RichLinkNode(:final label) => label,
-            RichImageNode() => '[图片]',
-            RichVideoNode() => '[视频]',
-            RichVoiceNode() => '[语音]',
-          },
-        )
-        .join()
-        .trim();
+    final style = AppTextStyle.callout
+        .of(context)
+        .copyWith(color: scheme.onSurface);
+    final emoSize = (style.fontSize ?? 16.0) * 1.25;
+
+    // 楼中楼预览曾经把富文本压成纯串，表情会露出 `#(滑稽)` 这种标记；
+    // 这里按节点逐个拼，表情走内联图，拿不到图才退回标记文本。
+    final preview = <InlineSpan>[];
+    for (final node in sub.content) {
+      switch (node) {
+        case RichTextNode(:final text):
+          preview.add(TextSpan(text: text));
+        case RichAtNode(:final text):
+          preview.add(TextSpan(text: text));
+        case RichLinkNode(:final label):
+          preview.add(TextSpan(text: label));
+        case RichImageNode():
+          preview.add(const TextSpan(text: '[图片]'));
+        case RichVideoNode():
+          preview.add(const TextSpan(text: '[视频]'));
+        case RichVoiceNode():
+          preview.add(const TextSpan(text: '[语音]'));
+        case RichEmoticonNode(:final id, :final name):
+          final url = TiebaEmoticons.urlForId(id);
+          if (url.isEmpty) {
+            preview.add(TextSpan(text: '#($name)'));
+          } else {
+            preview.add(
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Image.network(
+                    url,
+                    width: emoSize,
+                    height: emoSize,
+                    fit: BoxFit.contain,
+                    headers: tiebaImageHeaders,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, _, _) => Text('#($name)', style: style),
+                  ),
+                ),
+              ),
+            );
+          }
+      }
+    }
 
     return Text.rich(
       TextSpan(
-        style: AppTextStyle.callout
-            .of(context)
-            .copyWith(color: scheme.onSurface),
+        style: style,
         children: [
           TextSpan(
             text: sub.author.displayName,
@@ -345,7 +377,7 @@ class _SubPostPreviewLine extends StatelessWidget {
                   .copyWith(color: scheme.primary),
             ),
           const TextSpan(text: '：'),
-          TextSpan(text: preview),
+          ...preview,
         ],
       ),
       maxLines: 3,
