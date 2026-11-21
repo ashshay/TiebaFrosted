@@ -214,4 +214,14 @@ abstract final class FrostedGlyphs {
       'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
     ),
   ]);
+
+  /// 「进吧」排列切换：三条横杠，表示单列列表。
+  static const layoutList = Glyph([
+    GlyphPath('M4 5h16v3H4zm0 5.5h16v3H4zm0 5.5h16v3H4z'),
+  ]);
+
+  /// 「进吧」排列切换：田字格，表示多列网格。
+  static const layoutGrid = Glyph([
+    GlyphPath('M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z'),
+  ]);
 }

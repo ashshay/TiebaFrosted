@@ -35,6 +35,8 @@ class FrostedSettings extends ChangeNotifier {
   bool profileTabAvatar = true;
   bool hideReply = false;
   bool hideMedia = false;
+  /// 「进吧」页排列：false 为多列网格（原版默认），true 为单列列表。
+  bool forumListSingle = false;
 
   // 屏蔽总开关
   bool enableBlock = true;
@@ -80,6 +82,7 @@ class FrostedSettings extends ChangeNotifier {
     profileTabAvatar = _prefs.getBool('profile_tab_avatar') ?? true;
     hideReply = _prefs.getBool('hide_reply') ?? false;
     hideMedia = _prefs.getBool('hide_media') ?? false;
+    forumListSingle = _prefs.getBool('forum_list_single') ?? false;
 
     enableBlock = _prefs.getBool('enable_block') ?? true;
     blockVideoThread = _prefs.getBool('block_video_thread') ?? false;
@@ -181,6 +184,12 @@ class FrostedSettings extends ChangeNotifier {
   Future<void> setHideMedia(bool value) async {
     hideMedia = value;
     await _prefs.setBool('hide_media', value);
+    notifyListeners();
+  }
+
+  Future<void> setForumListSingle(bool value) async {
+    forumListSingle = value;
+    await _prefs.setBool('forum_list_single', value);
     notifyListeners();
   }
 

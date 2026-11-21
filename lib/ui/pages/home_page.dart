@@ -294,6 +294,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final chrome = context.watch<ChromeController>();
     final store = context.watch<FrostedStore>();
+    final settings = context.watch<FrostedSettings>();
 
     return PrismScaffold(
       bar: FrostedAppBar(
@@ -311,6 +312,22 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         actions: [
+          // 排列切换只在「进吧」页有意义，对应 TiebaLite 首页工具栏的 ViewAgenda 按钮。
+          if (_tab == 1)
+            PressScale(
+              scale: 0.92,
+              child: IconButton(
+                onPressed: () =>
+                    settings.setForumListSingle(!settings.forumListSingle),
+                tooltip: settings.forumListSingle ? '切换为网格排列' : '切换为单列排列',
+                icon: GlyphIcon(
+                  settings.forumListSingle
+                      ? FrostedGlyphs.layoutGrid
+                      : FrostedGlyphs.layoutList,
+                  size: 20,
+                ),
+              ),
+            ),
           PressScale(
             scale: 0.92,
             child: IconButton(
@@ -353,14 +370,18 @@ class _HomePageState extends State<HomePage> {
           child: FrostedRefresh(
             topInset: pageTopInset(context),
             onRefresh: _refreshCurrentTab,
-            child: _buildBody(context, store),
+            child: _buildBody(context, store, settings),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context, FrostedStore store) {
+  Widget _buildBody(
+    BuildContext context,
+    FrostedStore store,
+    FrostedSettings settings,
+  ) {
     final top = pageTopInset(context);
     final bottom = pageBottomInset(context);
 
@@ -478,38 +499,56 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       }
+      Widget buildForum(int idx, {required bool compact}) {
+        final f = _forums[idx];
+        final pinned = store.isTopForum(f.forumName);
+        return ForumCard(
+          key: ValueKey('forum-${f.forumId}'),
+          name: f.forumName,
+          avatar: f.avatar,
+          subtitle: joinMeta([
+            if (f.levelName.isNotEmpty) f.levelName,
+            if (f.curScore > 0) '经验 ${f.curScore}/${f.levelUpScore}',
+          ]),
+          levelId: f.levelId,
+          isSigned: f.isSign,
+          isPinned: pinned,
+          compact: compact,
+          onTap: () => openForum(context, f.forumName, initialAvatar: f.avatar),
+          onLongPress: () async {
+            await store.toggleTopForum(f.forumName);
+            if (context.mounted) {
+              showFrostedToast(
+                context,
+                pinned ? '已取消置顶 ${f.forumName}吧' : '已置顶 ${f.forumName}吧',
+              );
+              unawaited(_loadForums());
+            }
+          },
+        );
+      }
+
+      // 网格：自适应列宽、最小 180dp，对齐 TiebaLite 的 GridCells.Adaptive(180.dp)。
+      if (!settings.forumListSingle) {
+        return GridView.builder(
+          controller: _scroll,
+          padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 180,
+            mainAxisExtent: 52,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: _forums.length,
+          itemBuilder: (_, idx) => buildForum(idx, compact: true),
+        );
+      }
       return ListView.separated(
         controller: _scroll,
         padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
         itemCount: _forums.length,
         separatorBuilder: (_, _) => const SizedBox(height: 8),
-        itemBuilder: (context, idx) {
-          final f = _forums[idx];
-          final pinned = store.isTopForum(f.forumName);
-          return ForumCard(
-            key: ValueKey('forum-${f.forumId}'),
-            name: f.forumName,
-            avatar: f.avatar,
-            subtitle: joinMeta([
-              if (f.levelName.isNotEmpty) f.levelName,
-              if (f.curScore > 0) '经验 ${f.curScore}/${f.levelUpScore}',
-            ]),
-            levelId: f.levelId,
-            isSigned: f.isSign,
-            isPinned: pinned,
-            onTap: () => openForum(context, f.forumName, initialAvatar: f.avatar),
-            onLongPress: () async {
-              await store.toggleTopForum(f.forumName);
-              if (context.mounted) {
-                showFrostedToast(
-                  context,
-                  pinned ? '已取消置顶 ${f.forumName}吧' : '已置顶 ${f.forumName}吧',
-                );
-                unawaited(_loadForums());
-              }
-            },
-          );
-        },
+        itemBuilder: (_, idx) => buildForum(idx, compact: false),
       );
     }
 
