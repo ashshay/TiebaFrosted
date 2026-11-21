@@ -3,6 +3,9 @@
 > 贴吧的数据与容错 + `prism_ui` 液态玻璃界面与手感。
 > 参照源工程：`D:\coding\TiebaLite`（保持独立可用，不修改）。
 
+🌐 **发布页**：<https://ashshay.github.io/TiebaFrosted/>
+📦 **下载**：<https://github.com/ashshay/TiebaFrosted/releases/latest>
+
 ## 架构概览
 
 ```text
