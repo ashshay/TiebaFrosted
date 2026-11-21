@@ -96,14 +96,20 @@ class _ThreadPageState extends State<ThreadPage> {
     super.dispose();
   }
 
+  bool get _isDesc => _sortType == 1;
+
+  /// 倒序是从最后一页往前翻，所以「还有没有下一批」得看剩下几页可以往回走，
+  /// 而不是服务端在正序意义下报的 hasMore。
+  bool get _hasMoreInDirection =>
+      _isDesc ? _currentPage > 1 : _pageInfo.hasMore;
+
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    if (_scroll.offset >= _scroll.position.maxScrollExtent - 360 &&
-        _pageInfo.hasMore &&
-        !_loading &&
-        !_loadingMore) {
-      unawaited(_load(page: _currentPage + 1, reset: false));
-    }
+    if (_scroll.offset < _scroll.position.maxScrollExtent - 360) return;
+    if (_loading || _loadingMore || !_hasMoreInDirection) return;
+    unawaited(
+      _load(page: _isDesc ? _currentPage - 1 : _currentPage + 1, reset: false),
+    );
   }
 
   Future<void> _load({
@@ -559,7 +565,11 @@ class _ThreadPageState extends State<ThreadPage> {
                       _sortType = v;
                       _posts = [];
                     });
-                    unawaited(_load(page: 1, reset: true));
+                    if (_scroll.hasClients) _scroll.jumpTo(0);
+                    // 倒序从最后一页进，直接就是最新回复；正序/热门从第一页。
+                    final last = _pageInfo.effectiveTotalPage;
+                    final target = v == 1 && last > 0 ? last : 1;
+                    unawaited(_load(page: target, reset: true));
                   },
                   segments: const [
                     (0, '正序'),
@@ -622,7 +632,7 @@ class _ThreadPageState extends State<ThreadPage> {
               padding: EdgeInsets.symmetric(vertical: 16),
               child: FrostedLoading(),
             )
-          else if (!_pageInfo.hasMore && _posts.isNotEmpty)
+          else if (!_hasMoreInDirection && _posts.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 18),
               child: Center(
