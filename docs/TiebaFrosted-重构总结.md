@@ -107,6 +107,59 @@
 ## 7. 后续可选迭代项
 
 1. **已登录态写操作实测**：在真机使用个人百度账号完成登录后，逐项端到端验证回帖、发帖、图片分片上传、收藏/点赞、关注/取关、一键签到与多账号切换。
-2. **应用图标定制**：替换默认 Flutter 启动图标，并按需在 `AndroidManifest.xml` 中增加 `activity-alias` 支持图标形状切换。
+2. ~~**应用图标定制**~~：已完成，见 §8.2。
 3. **真机 Profile 帧率与内存体检**：在真机通过 `flutter run --profile` 压测快速滑动帖流与 Liquid Glass 渲染帧时间。
-4. **清理剩余 info 级 lint**：按需消除 `lib/` 中 6 处 `use_build_context_synchronously` 与 `tool/verify_p0_live.dart` 中 14 处 `avoid_print` 提示。
+4. ~~**清理剩余 info 级 lint**~~：已完成，`flutter analyze` 现为 `No issues found!`，见 §8.3。
+
+---
+
+## 8. 接管记录（2026-11-21）
+
+接手时项目**没有任何版本控制**，且质量门禁仍留有 20 条 info 级 lint。本节记录接管后完成的事项。
+
+### 8.1 版本控制基线
+
+- `git init` + 首次提交，108 个受控文件；`build/`、`.dart_tool/`、`pubspec_overrides.yaml` 均被既有 `.gitignore` 正确排除。
+- 新增 `.gitattributes`（`* text=auto eol=lf`，二进制与 `*.ps1/*.bat` 单独声明），避免 Windows 上 CRLF 抖动污染后续 diff。
+
+### 8.2 应用图标
+
+用户提供 IconKitchen 导出的完整图标包（`tieba.zip`），已落入 `android/app/src/main/res/`：
+
+| 资源 | 说明 |
+| --- | --- |
+| `mipmap-anydpi-v26/ic_launcher.xml` | 自适应图标声明（background / foreground / monochrome） |
+| `mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher.png` | 传统图标，供 Android < 8 使用 |
+| `mipmap-*/ic_launcher_{background,foreground,monochrome}.png` | 自适应图层，monochrome 支持 Android 13+ 主题图标 |
+
+外观为蓝色圆角方块 + 白色窗口符号 + 底部紫色 "TIEBA" 字条，与 Hobo / Bifu / FlClash 同一设计家族。`AndroidManifest.xml` 的 `android:icon="@mipmap/ic_launcher"` 无需改动——存在 `mipmap-anydpi-v26` 时 Android 8+ 自动选用自适应版本。
+
+### 8.3 lint 归零
+
+| 位置 | 原问题 | 处理 |
+| --- | --- | --- |
+| `thread_page.dart` ×3 | `use_build_context_synchronously` | `_buildBody(BuildContext context, …)` 的形参遮蔽了 `State.context`，分析器无法确认 `mounted` 与之相关；改用 `context.mounted`，并在 `await` 前取出 `repo` |
+| `home_page.dart` ×1 | 同上 | 同上，`_buildBody` 形参遮蔽 |
+| `forum_page.dart` ×1 | 同上 | 同上 |
+| `reply_page.dart` ×1 | 同上 | 缺前置守卫，补 `if (!mounted) return;` 后再取 `LocalDb` |
+| `tool/verify_p0_live.dart` ×14 | `avoid_print` | 文件级 `// ignore_for_file: avoid_print`；该脚本的用途就是向终端打印探针结果 |
+
+结果：`flutter analyze --no-fatal-infos` → `No issues found!`（此前为 0 error / 0 warning / 20 info）。
+
+### 8.4 调试环境：雷电模拟器
+
+**AVD 路线不可行**，本机不装虚拟机监控器：
+
+- `ANDROID_HOME` / `ANDROID_SDK_ROOT` 均未设置，真实 SDK 在 `D:\Android\sdk`，而插件（`@zseven-w/dsh-android`）按 `ANDROID_HOME → ANDROID_SDK_ROOT → %LOCALAPPDATA%\Android\Sdk → adb 同级 → PATH` 查找，五处全部落空，故 `android_devices.avds` 恒为空、`android_boot` 无法工作。
+- 更关键的是 **x86_64 镜像硬性要求硬件加速**：`HypervisorPresent: False`，AEHD / HAXM / gvm 驱动均未安装。`-accel off` 的 TCG 回退虽能把进程拉起，但 qemu 在 10 秒内 CPU 增量 0.0s（累计 0.4s），guest 从未执行，adb 始终 `offline`。
+
+**改走雷电 14**（`C:\leidian\LDPlayer14`，实例 `0`，1080×2400@440dpi）：`ldconsole launch --index 0` 后经自身 adb 桥接注册为 `emulator-5554`，`android_devices` 正确识别 `kind: emulator`、Android 14 / SDK 34 / x86_64，`android_boot` 的 AVD 发现与此无关。
+
+验证结果：
+
+- `flutter build apk --debug --target-platform android-x64` 成功（161.42 MB）
+- `adb -s emulator-5554 install -r` 成功；`monkey` 在雷电镜像中缺失，改用 `am start -n com.tiebafrosted.app/.MainActivity`
+- `topResumedActivity` 为 `MainActivity`，进程存活（pid 33568），crash buffer 为空，无 Flutter 异常
+- 截图确认：液态玻璃底栏、超椭圆 chip、卡片分层均正常渲染，内容来自真实贴吧接口
+- 启动器确认新图标生效，512px 源图文字为 **TIEBA**（非 TEIBA）
+

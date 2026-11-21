@@ -500,7 +500,7 @@ class _HomePageState extends State<HomePage> {
             onTap: () => openForum(context, f.forumName, initialAvatar: f.avatar),
             onLongPress: () async {
               await store.toggleTopForum(f.forumName);
-              if (mounted) {
+              if (context.mounted) {
                 showFrostedToast(
                   context,
                   pinned ? '已取消置顶 ${f.forumName}吧' : '已置顶 ${f.forumName}吧',

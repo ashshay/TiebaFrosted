@@ -1,3 +1,7 @@
+// The live probe prints its findings to a terminal; that is its whole output
+// channel, so the production-code print ban does not apply here.
+// ignore_for_file: avoid_print
+
 import 'package:tieba_frosted/core/device.dart';
 import 'package:tieba_frosted/data/api.dart';
 

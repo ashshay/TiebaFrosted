@@ -481,19 +481,20 @@ class _ThreadPageState extends State<ThreadPage> {
             poll: _thread.poll!,
             onVote: (optionIds) async {
               if (!await ensureLoggedIn(context, reason: '登录后即可参与投票')) return;
-              if (!mounted) return;
+              if (!context.mounted) return;
+              final repo = context.read<TiebaRepo>();
               try {
-                await context.read<TiebaRepo>().votePoll(
+                await repo.votePoll(
                   forumId: _effectiveForumId,
                   threadId: widget.threadId,
                   optionIds: optionIds,
                 );
-                if (mounted) {
+                if (context.mounted) {
                   showFrostedToast(context, '投票成功');
                   unawaited(_load(page: 1, reset: true));
                 }
               } on Object catch (e) {
-                if (mounted) {
+                if (context.mounted) {
                   showFrostedToast(
                     context,
                     cleanError(e),

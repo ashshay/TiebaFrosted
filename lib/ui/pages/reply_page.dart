@@ -196,6 +196,7 @@ class _ReplyPageState extends State<ReplyPage> {
         );
       }
 
+      if (!mounted) return;
       await context.read<LocalDb>().deleteDraft(_draftKey);
       if (!mounted) return;
       showFrostedToast(

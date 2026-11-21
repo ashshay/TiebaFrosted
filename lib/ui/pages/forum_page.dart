@@ -313,14 +313,16 @@ class _ForumPageState extends State<ForumPage> {
                       if (!await ensureLoggedIn(context, reason: '登录后即可发帖')) {
                         return;
                       }
-                      if (!mounted || _forum.id <= 0) return;
+                      if (!context.mounted || _forum.id <= 0) return;
                       final ok = await openComposeThread(
                         context,
                         forumId: _forum.id,
                         forumName: _forum.name,
                         tbs: _tbs,
                       );
-                      if (ok == true && mounted) unawaited(_load(refresh: true));
+                      if (ok == true && context.mounted) {
+                        unawaited(_load(refresh: true));
+                      }
                     },
                   ),
                   (
