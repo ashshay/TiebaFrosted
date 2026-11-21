@@ -17,6 +17,7 @@ import '../widgets/glyphs.dart';
 import '../widgets/post_tile.dart';
 import '../widgets/press_scale.dart';
 import '../widgets/refresh.dart';
+import '../widgets/remote_image.dart';
 import '../widgets/skeleton.dart';
 
 /// 帖子详情页（核心）：主楼 + 楼层列表 + 只看楼主 + 排序切换 + 投票 + 收藏/点赞 + 底部回复栏。
@@ -327,6 +328,65 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
+  /// 帖内动作：只看楼主 / 收藏 / 更多。顶栏与回复区顶栏共用同一份。
+  List<Widget> _threadActions(ColorScheme scheme) => [
+    PressScale(
+      scale: 0.92,
+      child: IconButton(
+        onPressed: () {
+          setState(() {
+            _seeLz = !_seeLz;
+            _posts = [];
+          });
+          unawaited(_load(page: 1, reset: true));
+        },
+        tooltip: _seeLz ? '查看全部' : '只看楼主',
+        icon: GlyphIcon(
+          FrostedGlyphs.person,
+          size: 20,
+          color: _seeLz ? scheme.primary : scheme.onSurface,
+          fill: _seeLz ? 1 : 0,
+        ),
+      ),
+    ),
+    PressScale(
+      scale: 0.92,
+      child: IconButton(
+        onPressed: _toggleCollect,
+        tooltip: _thread.isCollected ? '取消收藏' : '收藏',
+        icon: context.disableAnimations
+            ? GlyphIcon(
+                FrostedGlyphs.bookmark,
+                size: 20,
+                color: _thread.isCollected
+                    ? scheme.primary
+                    : scheme.onSurface,
+                fill: _thread.isCollected ? 1 : 0,
+              )
+            : IconTheme(
+                data: IconThemeData(
+                  size: 20,
+                  color: _thread.isCollected
+                      ? scheme.primary
+                      : scheme.onSurface,
+                ),
+                child: AnimatedGlyph(
+                  glyph: FrostedGlyphs.bookmark,
+                  filled: _thread.isCollected,
+                ),
+              ),
+      ),
+    ),
+    PressScale(
+      scale: 0.92,
+      child: IconButton(
+        onPressed: _showThreadActions,
+        tooltip: '更多',
+        icon: const GlyphIcon(FrostedGlyphs.more, size: 20),
+      ),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final scheme = context.colorScheme;
@@ -337,63 +397,21 @@ class _ThreadPageState extends State<ThreadPage> {
 
     return FrostedPage(
       title: title,
-      actions: [
-        PressScale(
-          scale: 0.92,
-          child: IconButton(
-            onPressed: () {
-              setState(() {
-                _seeLz = !_seeLz;
-                _posts = [];
-              });
-              unawaited(_load(page: 1, reset: true));
-            },
-            tooltip: _seeLz ? '查看全部' : '只看楼主',
-            icon: GlyphIcon(
-              FrostedGlyphs.person,
-              size: 20,
-              color: _seeLz ? scheme.primary : scheme.onSurface,
-              fill: _seeLz ? 1 : 0,
-            ),
-          ),
-        ),
-        PressScale(
-          scale: 0.92,
-          child: IconButton(
-            onPressed: _toggleCollect,
-            tooltip: _thread.isCollected ? '取消收藏' : '收藏',
-            icon: context.disableAnimations
-                ? GlyphIcon(
-                    FrostedGlyphs.bookmark,
-                    size: 20,
-                    color: _thread.isCollected
-                        ? scheme.primary
-                        : scheme.onSurface,
-                    fill: _thread.isCollected ? 1 : 0,
-                  )
-                : IconTheme(
-                    data: IconThemeData(
-                      size: 20,
-                      color: _thread.isCollected
-                          ? scheme.primary
-                          : scheme.onSurface,
-                    ),
-                    child: AnimatedGlyph(
-                      glyph: FrostedGlyphs.bookmark,
-                      filled: _thread.isCollected,
-                    ),
-                  ),
-          ),
-        ),
-        PressScale(
-          scale: 0.92,
-          child: IconButton(
-            onPressed: _showThreadActions,
-            tooltip: '更多',
-            icon: const GlyphIcon(FrostedGlyphs.more, size: 20),
-          ),
-        ),
-      ],
+      titleWidget: _ForumTitlePill(
+        forumName: _effectiveForumName,
+        avatar: _thread.forumAvatar,
+        fallback: title,
+        onTap: _effectiveForumName.isEmpty
+            ? null
+            : () => openForum(
+                context,
+                _effectiveForumName,
+                initialAvatar: _thread.forumAvatar,
+              ),
+      ),
+      // 收藏 / 只看楼主 / 更多 已下移到回复区那一行；「隐藏回复」时回复区整块不渲染，
+      // 动作仍留在顶栏，否则帖内就没有入口了。
+      actions: settings.hideReply ? _threadActions(scheme) : const [],
       foot: _BottomReplyBar(
         replyCount: _thread.replyNum,
         currentPage: _currentPage,
@@ -439,14 +457,30 @@ class _ThreadPageState extends State<ThreadPage> {
         MediaQuery.paddingOf(context).bottom + 96,
       ),
       children: [
-        if (_thread.displayTitle.isNotEmpty) ...[
+        if (_thread.displayTitle.isNotEmpty || _thread.replyNum > 0) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              _thread.displayTitle,
-              style: AppTextStyle.title2
-                  .of(context)
-                  .copyWith(fontWeight: FontWeight.w700),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Text(
+                    _thread.displayTitle,
+                    style: AppTextStyle.title2
+                        .of(context)
+                        .copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (_thread.replyNum > 0) ...[
+                  const SizedBox(width: 10),
+                  Text(
+                    '全部回复 (${formatCount(_thread.replyNum)})',
+                    style: AppTextStyle.subheadline
+                        .of(context)
+                        .copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ],
             ),
           ),
           const SizedBox(height: 10),
@@ -509,12 +543,7 @@ class _ThreadPageState extends State<ThreadPage> {
         if (!settings.hideReply) ...[
           Row(
             children: [
-              Text(
-                '全部回复 (${formatCount(_thread.replyNum)})',
-                style: AppTextStyle.headline
-                    .of(context)
-                    .copyWith(fontWeight: FontWeight.w600),
-              ),
+              ..._threadActions(scheme),
               const Spacer(),
               SizedBox(
                 width: 176,
@@ -800,6 +829,72 @@ class _PollCardState extends State<_PollCard> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// 顶栏中央的吧名胶囊：头像 + 吧名，点击进吧。
+///
+/// 对齐 TiebaLite `ThreadPage` 的 `TopBar`——吧名在那里就是一个带底色的可点胶囊，
+/// 而不是纯文本标题，这样「进吧」这件事在页面上有明确入口。
+class _ForumTitlePill extends StatelessWidget {
+  const _ForumTitlePill({
+    required this.forumName,
+    required this.avatar,
+    required this.fallback,
+    this.onTap,
+  });
+
+  final String forumName;
+  final String avatar;
+  final String fallback;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    if (onTap == null) {
+      return Text(fallback, maxLines: 1, overflow: TextOverflow.ellipsis);
+    }
+    return PressScale(
+      scale: 0.95,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(3, 3, 12, 3),
+          decoration: ShapeDecoration(
+            color: scheme.surfaceContainerHighest,
+            shape: AppShape.full,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RemoteImage(
+                url: avatar,
+                width: 26,
+                height: 26,
+                radius: AppCorner.full,
+                placeholderColor: scheme.surfaceContainerHigh,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '$forumName吧',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyle.footnote
+                      .of(context)
+                      .copyWith(
+                        color: scheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

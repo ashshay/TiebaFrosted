@@ -461,6 +461,7 @@ class FrostedPage extends StatelessWidget {
     super.key,
     required this.title,
     required this.body,
+    this.titleWidget,
     this.actions = const [],
     this.leading,
     this.foot,
@@ -470,6 +471,9 @@ class FrostedPage extends StatelessWidget {
   });
 
   final String title;
+
+  /// 顶栏标题的富版本（如帖子页可点击的吧名胶囊）；给了就不再用 [title] 起纯文本。
+  final Widget? titleWidget;
   final Widget body;
   final List<Widget> actions;
   final Widget? leading;
@@ -484,7 +488,9 @@ class FrostedPage extends StatelessWidget {
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       bar: FrostedAppBar(
         leading: leading ?? const FrostedBackButton(),
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title:
+            titleWidget ??
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
         titleTextStyle: AppTextStyle.title3
             .of(context)
             .copyWith(
