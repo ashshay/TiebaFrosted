@@ -34,6 +34,15 @@ flutter build apk --debug
 flutter build apk --release --target-platform android-arm64
 ```
 
+### 构建约束（勿随意回退）
+
+- `android/app/build.gradle.kts` 把 `compileSdk` 固定为 **37**（Flutter 默认仍是 36）：
+  `flutter_local_notifications` 23 的 AAR 元数据要求 API 37。降回去会直接构建失败。
+- 同一个 `compileOptions` 里开启了 `isCoreLibraryDesugaringEnabled`，并依赖
+  `com.android.tools:desugar_jdk_libs`；这是该插件对 `java.time` 的硬要求。
+- 通知渠道 `tieba_frosted_oksign` 的栏图标是 `res/drawable-*/ic_stat_oksign.png`
+  （由自适应图标的 monochrome 剪影生成），换图标时记得一并重新生成。
+
 ## 开源许可
 
 本项目遵循 **GNU General Public License v3.0**（见 [`LICENSE`](LICENSE) 与 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)）。

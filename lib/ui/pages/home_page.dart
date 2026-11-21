@@ -340,7 +340,7 @@ class _HomePageState extends State<HomePage> {
             PressScale(
               scale: 0.92,
               child: IconButton(
-                onPressed: () => openSettingsOkSign(context),
+                onPressed: () => runOneClickOkSign(context),
                 tooltip: '一键签到',
                 icon: const GlyphIcon(FrostedGlyphs.calendarCheck, size: 20),
               ),

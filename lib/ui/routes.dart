@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
@@ -8,6 +10,7 @@ import '../core/links.dart';
 import '../data/local_db.dart';
 import '../data/models.dart';
 import '../data/native_channels.dart';
+import '../data/oksign_notifier.dart';
 import '../data/repo.dart';
 import '../data/store.dart';
 import 'nav.dart';
@@ -398,4 +401,69 @@ Future<bool> ensureLoggedIn(BuildContext context, {String? reason}) async {
     return loggedIn == true;
   }
   return false;
+}
+
+bool _okSignRunning = false;
+
+/// 顶栏「一键签到」：点一下直接全签，进度与结果落在通知栏，
+/// 与 TiebaLite 的 `OKSignService` 一致。
+///
+/// 设置 → 账号与内容 →「自动签到与一键全签」仍是同一能力的可视化版本
+/// （带逐吧日志与定时设置），这里是它的快捷入口。
+Future<void> runOneClickOkSign(BuildContext context) async {
+  if (_okSignRunning) {
+    showFrostedToast(context, '签到正在进行中…');
+    return;
+  }
+  if (!await ensureLoggedIn(context, reason: '登录后即可一键全签')) return;
+  if (!context.mounted) return;
+
+  final repo = context.read<TiebaRepo>();
+  final accent = context.colorScheme.primary;
+
+  _okSignRunning = true;
+  await okSignNotifier.show(
+    title: '一键签到',
+    text: '正在获取关注贴吧列表…',
+    accent: accent,
+    ongoing: true,
+  );
+
+  try {
+    final result = await repo.okSignAll(
+      onProgress: (current, total, forum, status) {
+        // 回调是同步的，通知更新不必阻塞签到节奏。
+        unawaited(
+          okSignNotifier.show(
+            title: total > 0 ? '一键签到 $current/$total' : '一键签到',
+            text: '$forum · $status',
+            accent: accent,
+            ongoing: true,
+          ),
+        );
+      },
+    );
+    final summary = result.total == 0
+        ? '还没有关注任何贴吧'
+        : '共 ${result.total} 吧：成功 ${result.signed}，'
+              '已签跳过 ${result.skipped}，失败 ${result.failed}';
+    await okSignNotifier.show(
+      title: result.total == 0 ? '一键签到' : '签到完成',
+      text: summary,
+      accent: accent,
+    );
+    if (context.mounted) showFrostedToast(context, summary);
+  } on Object catch (e) {
+    final message = cleanError(e);
+    await okSignNotifier.show(
+      title: '签到失败',
+      text: message,
+      accent: accent,
+    );
+    if (context.mounted) {
+      showFrostedToast(context, message, level: BannerLevel.error);
+    }
+  } finally {
+    _okSignRunning = false;
+  }
 }
