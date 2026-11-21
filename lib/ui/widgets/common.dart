@@ -363,6 +363,7 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions = const [],
     this.titleTextStyle,
     this.toolbarHeight,
+    this.centerTitle = false,
     this.hidden = false,
   });
 
@@ -371,6 +372,7 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget> actions;
   final TextStyle? titleTextStyle;
   final double? toolbarHeight;
+  final bool centerTitle;
   final bool hidden;
 
   @override
@@ -395,6 +397,7 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
               leading: leading,
               title: title,
               actions: actions,
+              centerTitle: centerTitle,
               titleTextStyle: titleTextStyle,
               toolbarHeight: toolbarHeight,
               clipBehavior: Clip.none,
@@ -466,6 +469,7 @@ class FrostedPage extends StatelessWidget {
     this.leading,
     this.foot,
     this.footActions,
+    this.centerTitle = false,
     this.hidden = false,
     this.resizeToAvoidBottomInset,
   });
@@ -479,6 +483,7 @@ class FrostedPage extends StatelessWidget {
   final Widget? leading;
   final Widget? foot;
   final Widget? footActions;
+  final bool centerTitle;
   final bool hidden;
   final bool? resizeToAvoidBottomInset;
 
@@ -498,6 +503,7 @@ class FrostedPage extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
         actions: actions,
+        centerTitle: centerTitle,
         hidden: hidden,
       ),
       body: body,

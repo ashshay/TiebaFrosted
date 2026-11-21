@@ -27,6 +27,7 @@ class ThreadPage extends StatefulWidget {
     required this.threadId,
     this.forumId = 0,
     this.forumName = '',
+    this.forumAvatar = '',
     this.initialPostId,
     this.initialSubPostId,
     this.initialTitle = '',
@@ -36,6 +37,9 @@ class ThreadPage extends StatefulWidget {
   final int threadId;
   final int forumId;
   final String forumName;
+
+  /// 上一页已知的吧头像，进来就能画出来，不必等帖内接口返回。
+  final String forumAvatar;
   final int? initialPostId;
   final int? initialSubPostId;
   final String initialTitle;
@@ -155,6 +159,14 @@ class _ThreadPageState extends State<ThreadPage> {
   int get _effectiveForumId => _forum.id > 0 ? _forum.id : _thread.forumId;
   String get _effectiveForumName =>
       _forum.name.isNotEmpty ? _forum.name : _thread.forumName;
+
+  /// 吧头像优先取帖内拉到的 `TiebaForum`，其次用上一页带过来的，最后退回帖子自带的
+  /// `forumAvatar`；全空时胶囊显示占位块。
+  String get _effectiveForumAvatar {
+    if (_forum.avatar.isNotEmpty) return _forum.avatar;
+    if (widget.forumAvatar.isNotEmpty) return widget.forumAvatar;
+    return _thread.forumAvatar;
+  }
 
   Future<void> _toggleCollect() async {
     if (!await ensureLoggedIn(context, reason: '登录后即可收藏帖子')) return;
@@ -397,16 +409,17 @@ class _ThreadPageState extends State<ThreadPage> {
 
     return FrostedPage(
       title: title,
+      centerTitle: true,
       titleWidget: _ForumTitlePill(
         forumName: _effectiveForumName,
-        avatar: _thread.forumAvatar,
+        avatar: _effectiveForumAvatar,
         fallback: title,
         onTap: _effectiveForumName.isEmpty
             ? null
             : () => openForum(
                 context,
                 _effectiveForumName,
-                initialAvatar: _thread.forumAvatar,
+                initialAvatar: _effectiveForumAvatar,
               ),
       ),
       // 收藏 / 只看楼主 / 更多 已下移到回复区那一行；「隐藏回复」时回复区整块不渲染，

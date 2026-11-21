@@ -562,6 +562,7 @@ class _ForumPageState extends State<ForumPage> {
                         threadId: t.effectiveId,
                         forumId: _forum.id,
                         forumName: _forum.name,
+                        forumAvatar: _forum.avatar,
                         initialTitle: t.displayTitle,
                       ),
                       onLongPress: () => showThreadContextMenu(context, t),
