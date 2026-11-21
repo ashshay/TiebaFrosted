@@ -492,7 +492,8 @@ class _ThreadPageState extends State<ThreadPage> {
             child: Text(
               _thread.displayTitle,
               textAlign: TextAlign.center,
-              style: AppTextStyle.title2
+              // 正文大小、仅加粗：标题不再比楼层正文更抢眼，只靠字重分层。
+              style: AppTextStyle.body
                   .of(context)
                   .copyWith(fontWeight: FontWeight.w700),
             ),

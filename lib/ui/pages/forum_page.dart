@@ -557,6 +557,8 @@ class _ForumPageState extends State<ForumPage> {
                       key: ValueKey('frs-${t.effectiveId}'),
                       thread: t,
                       showForumBadge: false,
+                      // 置顶帖（公告、吧规一类）压成单行，别让置顶内容占掉半屏。
+                      compact: t.isTop,
                       onTap: () => openThread(
                         context,
                         threadId: t.effectiveId,

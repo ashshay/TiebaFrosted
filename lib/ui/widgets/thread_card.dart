@@ -20,6 +20,7 @@ class ThreadCard extends StatelessWidget {
     super.key,
     required this.thread,
     this.showForumBadge = true,
+    this.compact = false,
     this.onTap,
     this.onLongPress,
     this.onForumTap,
@@ -30,6 +31,10 @@ class ThreadCard extends StatelessWidget {
 
   final TiebaThread thread;
   final bool showForumBadge;
+
+  /// 单行精简：只留角标与标题，不画作者、摘要、图片和操作栏。
+  /// 吧页的置顶帖（公告、吧规一类）用它，避免置顶内容占掉半屏。
+  final bool compact;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onForumTap;
@@ -55,6 +60,48 @@ class ThreadCard extends StatelessWidget {
         thread.lastTimeStr,
       if (thread.author.ipAddress.isNotEmpty) thread.author.ipAddress,
     ];
+
+    if (compact) {
+      return Semantics(
+        button: true,
+        label: '${thread.isTop ? "置顶 " : ""}$title',
+        child: FrostedCard(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          onPressed: onTap,
+          onLongPress: onLongPress == null
+              ? null
+              : () {
+                  HapticFeedback.mediumImpact();
+                  onLongPress!();
+                },
+          child: Row(
+            children: [
+              if (thread.isTop) ...[
+                FrostedTag(label: '置顶', color: scheme.error),
+                const SizedBox(width: 8),
+              ],
+              if (thread.isGood) ...[
+                FrostedTag(label: '精', color: context.warning),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  title.isNotEmpty ? title : '（无标题）',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyle.subheadline
+                      .of(context)
+                      .copyWith(
+                        color: scheme.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Semantics(
       button: true,

@@ -95,6 +95,11 @@ class ProfileHeaderLayout {
     );
     final nameLeft = lerpDouble(16, avatarLeft + avatarSize + 8, nameShift)!;
 
+    // 封面在 p≈0.34 就滑出栏的范围了，底色必须在那之前填满：
+    // 之前要到 0.62 才不透明，中间那段窗口里栏是半透的，
+    // 栏内图标和滑过的内容会糊在一起（折叠过程中「字被遮住」就是这段）。
+    final barFill = ((p - 0.28) / 0.16).clamp(0.0, 1.0);
+
     return ProfileHeaderLayout(
       extent: extent,
       coverBottom: coverBottom,
@@ -105,13 +110,13 @@ class ProfileHeaderLayout {
       nameLeft: nameLeft,
       nameScale: nameScale,
       nameHeight: nameHeight,
-      // 底色要比封面更早填满：封面在 coverRange 处移出后，列表就会从栏下穿过，
-      // 底色若还没满，栏里会透出半截正文（吧页折叠时看到的「2025-03-26」就是这样）。
-      barFill: ((p - 0.35) / (ProfileHeaderDelegate.coverRange - 0.35)).clamp(
-        0.0,
-        1.0,
-      ),
-      buttonTint: Color.lerp(const Color(0xFFFFFFFF), onSurface, ease)!,
+      barFill: barFill,
+      // 图标在封面之上要白，在实底栏上要深；跟着底色一起切，别留在浅灰的中间态。
+      buttonTint: Color.lerp(
+        const Color(0xFFFFFFFF),
+        onSurface,
+        math.max(ease, barFill),
+      )!,
     );
   }
 }
