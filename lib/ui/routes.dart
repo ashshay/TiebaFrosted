@@ -88,6 +88,7 @@ Future<void> openThread(
   int? subPostId,
   String initialTitle = '',
   bool fromStore = false,
+  bool focusReplies = false,
 }) => pushPage(
   context,
   ThreadPage(
@@ -95,6 +96,7 @@ Future<void> openThread(
     forumId: forumId,
     forumName: forumName,
     forumAvatar: forumAvatar,
+    focusReplies: focusReplies,
     initialPostId: postId,
     initialSubPostId: subPostId,
     initialTitle: initialTitle,

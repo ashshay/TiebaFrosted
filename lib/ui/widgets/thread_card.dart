@@ -26,6 +26,7 @@ class ThreadCard extends StatelessWidget {
     this.onForumTap,
     this.onAuthorTap,
     this.onAgreeTap,
+    this.onCommentTap,
     this.onImageTap,
   });
 
@@ -40,6 +41,9 @@ class ThreadCard extends StatelessWidget {
   final VoidCallback? onForumTap;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onAgreeTap;
+
+  /// 点评论按钮：直接进帖子并定位到回复区；为空时退回 [onTap]。
+  final VoidCallback? onCommentTap;
   final void Function(List<RichImageNode> images, int index)? onImageTap;
 
   @override
@@ -297,12 +301,12 @@ class ThreadCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 14),
                 _ActionPill(
-                  tooltip: '回复数',
+                  tooltip: '查看评论',
                   glyph: FrostedGlyphs.comment,
                   label: thread.replyNum > 0
                       ? formatCount(thread.replyNum)
                       : '回复',
-                  onTap: onTap,
+                  onTap: onCommentTap ?? onTap,
                 ),
                 if (thread.viewNum > 0) ...[
                   const Spacer(),

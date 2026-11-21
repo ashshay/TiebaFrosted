@@ -278,6 +278,14 @@ class ExploreViewState extends State<ExploreView> {
                 initialTitle: threads[i].displayTitle,
               ),
               onLongPress: () => showThreadContextMenu(context, threads[i]),
+              onCommentTap: () => openThread(
+                context,
+                threadId: threads[i].effectiveId,
+                forumId: threads[i].forumId,
+                forumName: threads[i].forumName,
+                initialTitle: threads[i].displayTitle,
+                focusReplies: true,
+              ),
               onForumTap: () => openForum(context, threads[i].forumName),
               onAuthorTap: threads[i].author.id > 0
                   ? () => openUserProfile(

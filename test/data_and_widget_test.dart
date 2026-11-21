@@ -208,7 +208,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('首页'), findsOneWidget);
-      expect(find.text('发现'), findsOneWidget);
+      expect(find.text('动态'), findsOneWidget);
       expect(find.text('消息'), findsOneWidget);
       expect(find.text('我的'), findsOneWidget);
     });

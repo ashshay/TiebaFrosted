@@ -17,7 +17,6 @@ import '../widgets/forum_card.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/press_scale.dart';
 import '../widgets/refresh.dart';
-import 'explore_page.dart';
 
 /// 首页：进吧（关注列表）与发现（热议）两栏，顶栏分段切换。
 ///
@@ -31,15 +30,12 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final ScrollController _scroll = ScrollController();
-  final GlobalKey<ExploreViewState> _exploreKey = GlobalKey<ExploreViewState>();
   ChromeController? _chrome;
-  int _tab = 0; // 0 = 进吧, 1 = 发现
   int _lastHomeRefresh = 0;
 
   List<FollowedForum> _forums = [];
   bool _forumsLoading = false;
   String? _forumsError;
-  bool _forumsLoadedOnce = false;
 
   @override
   void initState() {
@@ -50,7 +46,7 @@ class _HomePageState extends State<HomePage> {
       _chrome = context.read<ChromeController>();
       _lastHomeRefresh = _chrome!.homeRefreshCount;
       _chrome!.addListener(_onChromeChange);
-      if (_tab == 0) unawaited(_loadForums());
+      unawaited(_loadForums());
     });
   }
 
@@ -73,31 +69,13 @@ class _HomePageState extends State<HomePage> {
         curve: Curves.easeOutCubic,
       );
     }
-    unawaited(_refreshCurrentTab());
+    unawaited(_loadForums());
   }
 
   void _onScrollNearBottom() {
-    if (_tab != 0 || !_scroll.hasClients) return;
+    if (!_scroll.hasClients) return;
     final max = _scroll.position.maxScrollExtent;
     if (max <= 0 || _scroll.offset < max - 360) return;
-  }
-
-  Future<void> _refreshCurrentTab() async {
-    if (_tab == 0) {
-      await _loadForums();
-    } else {
-      await _exploreKey.currentState?.reload();
-    }
-  }
-
-  void _switchTab(int next) {
-    if (next == _tab) return;
-    setState(() => _tab = next);
-    context.read<ChromeController>().setHidden(false);
-    if (next == 0) {
-      if (_scroll.hasClients) _scroll.jumpTo(0);
-      if (!_forumsLoadedOnce) unawaited(_loadForums());
-    }
   }
 
   Future<void> _loadForums() async {
@@ -106,7 +84,6 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _forums = [];
         _forumsLoading = false;
-        _forumsLoadedOnce = true;
       });
       return;
     }
@@ -120,14 +97,12 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _forums = list;
         _forumsLoading = false;
-        _forumsLoadedOnce = true;
       });
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _forumsError = cleanError(e);
         _forumsLoading = false;
-        _forumsLoadedOnce = true;
       });
     }
   }
@@ -141,33 +116,30 @@ class _HomePageState extends State<HomePage> {
     return PrismScaffold(
       bar: FrostedAppBar(
         hidden: chrome.hidden,
-        title: SizedBox(
-          width: 168,
-          child: SegmentedControl<int>(
-            value: _tab,
-            onChanged: _switchTab,
-            segments: const [
-              (0, '进吧'),
-              (1, '发现'),
-            ],
-          ),
+        title: Text(
+          '关注贴吧',
+          style: AppTextStyle.title3
+              .of(context)
+              .copyWith(
+                color: context.colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
         ),
         actions: [
-          if (_tab == 0)
-            PressScale(
-              scale: 0.92,
-              child: IconButton(
-                onPressed: () =>
-                    settings.setForumListSingle(!settings.forumListSingle),
-                tooltip: settings.forumListSingle ? '切换为网格排列' : '切换为单列排列',
-                icon: GlyphIcon(
-                  settings.forumListSingle
-                      ? FrostedGlyphs.layoutGrid
-                      : FrostedGlyphs.layoutList,
-                  size: 20,
-                ),
+          PressScale(
+            scale: 0.92,
+            child: IconButton(
+              onPressed: () =>
+                  settings.setForumListSingle(!settings.forumListSingle),
+              tooltip: settings.forumListSingle ? '切换为网格排列' : '切换为单列排列',
+              icon: GlyphIcon(
+                settings.forumListSingle
+                    ? FrostedGlyphs.layoutGrid
+                    : FrostedGlyphs.layoutList,
+                size: 20,
               ),
             ),
+          ),
           PressScale(
             scale: 0.92,
             child: IconButton(
@@ -195,25 +167,12 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      body: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragEnd: (details) {
-          final v = details.primaryVelocity ?? 0;
-          if (v < -300 && _tab < 1) {
-            _switchTab(1);
-          } else if (v > 300 && _tab > 0) {
-            _switchTab(0);
-          }
-        },
-        child: ChromeScrollListener(
-          onHiddenChanged: chrome.setHidden,
-          child: FrostedRefresh(
-            topInset: pageTopInset(context),
-            onRefresh: _refreshCurrentTab,
-            child: _tab == 0
-                ? _buildForums(context, store, settings)
-                : ExploreView(key: _exploreKey),
-          ),
+      body: ChromeScrollListener(
+        onHiddenChanged: chrome.setHidden,
+        child: FrostedRefresh(
+          topInset: pageTopInset(context),
+          onRefresh: _loadForums,
+          child: _buildForums(context, store, settings),
         ),
       ),
     );

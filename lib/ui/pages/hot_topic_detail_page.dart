@@ -185,6 +185,14 @@ class _HotTopicDetailPageState extends State<HotTopicDetailPage> {
                             ),
                             onForumTap: () =>
                                 openForum(context, _threads[i].forumName),
+                            onCommentTap: () => openThread(
+                              context,
+                              threadId: _threads[i].effectiveId,
+                              forumId: _threads[i].forumId,
+                              forumName: _threads[i].forumName,
+                              initialTitle: _threads[i].displayTitle,
+                              focusReplies: true,
+                            ),
                           ),
                         ],
                       if (_loadingMore)

@@ -17,6 +17,7 @@ import '../widgets/press_scale.dart';
 import '../widgets/refresh.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/thread_card.dart';
+import 'explore_page.dart';
 
 /// 动态页：原首页的「推荐」与「关注」两条流合并到底栏一格，顶栏分段切换。
 ///
@@ -30,8 +31,9 @@ class FeedPage extends StatefulWidget {
 
 class _FeedPageState extends State<FeedPage> {
   final ScrollController _scroll = ScrollController();
+  final GlobalKey<ExploreViewState> _exploreKey = GlobalKey<ExploreViewState>();
   ChromeController? _chrome;
-  int _tab = 0; // 0 = 推荐, 1 = 关注
+  int _tab = 0; // 0 = 推荐, 1 = 关注, 2 = 热榜
   int _lastFeedRefresh = 0;
 
   // 推荐流
@@ -101,10 +103,13 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _refreshCurrentTab() async {
-    if (_tab == 0) {
-      await _loadRec(refresh: true);
-    } else {
-      await _loadConcern(refresh: true);
+    switch (_tab) {
+      case 0:
+        await _loadRec(refresh: true);
+      case 1:
+        await _loadConcern(refresh: true);
+      case 2:
+        await _exploreKey.currentState?.reload();
     }
   }
 
@@ -255,13 +260,14 @@ class _FeedPageState extends State<FeedPage> {
       bar: FrostedAppBar(
         hidden: chrome.hidden,
         title: SizedBox(
-          width: 168,
+          width: 228,
           child: SegmentedControl<int>(
             value: _tab,
             onChanged: _switchTab,
             segments: const [
               (0, '推荐'),
               (1, '关注'),
+              (2, '热榜'),
             ],
           ),
         ),
@@ -307,6 +313,8 @@ class _FeedPageState extends State<FeedPage> {
   Widget _buildBody(BuildContext context, FrostedStore store) {
     final top = pageTopInset(context);
     final bottom = pageBottomInset(context);
+
+    if (_tab == 2) return ExploreView(key: _exploreKey);
 
     if (_tab == 0) {
       if (_recLoading && _recThreads.isEmpty) {
@@ -369,6 +377,15 @@ class _FeedPageState extends State<FeedPage> {
                   )
                 : null,
             onAgreeTap: () => _toggleAgree(_recThreads, idx),
+            onCommentTap: () => openThread(
+              context,
+              threadId: t.effectiveId,
+              forumId: t.forumId,
+              forumName: t.forumName,
+              forumAvatar: t.forumAvatar,
+              initialTitle: t.displayTitle,
+              focusReplies: true,
+            ),
             onImageTap: (imgs, i) =>
                 openImageViewer(context, images: imgs, initialIndex: i),
           );
@@ -447,6 +464,15 @@ class _FeedPageState extends State<FeedPage> {
                 )
               : null,
           onAgreeTap: () => _toggleAgree(_concernThreads, idx),
+          onCommentTap: () => openThread(
+            context,
+            threadId: t.effectiveId,
+            forumId: t.forumId,
+            forumName: t.forumName,
+            forumAvatar: t.forumAvatar,
+            initialTitle: t.displayTitle,
+            focusReplies: true,
+          ),
           onImageTap: (imgs, i) =>
               openImageViewer(context, images: imgs, initialIndex: i),
         );

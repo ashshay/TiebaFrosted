@@ -33,6 +33,7 @@ class ThreadPage extends StatefulWidget {
     this.initialSubPostId,
     this.initialTitle = '',
     this.fromStore = false,
+    this.focusReplies = false,
   });
 
   final int threadId;
@@ -46,12 +47,16 @@ class ThreadPage extends StatefulWidget {
   final String initialTitle;
   final bool fromStore;
 
+  /// 首屏加载完直接滚到回复区（信息流点「评论」进来时用）。
+  final bool focusReplies;
+
   @override
   State<ThreadPage> createState() => _ThreadPageState();
 }
 
 class _ThreadPageState extends State<ThreadPage> {
   final ScrollController _scroll = ScrollController();
+  final GlobalKey _repliesKey = GlobalKey();
 
   TiebaThread _thread = const TiebaThread(id: 0);
   TiebaForum _forum = const TiebaForum();
@@ -69,6 +74,9 @@ class _ThreadPageState extends State<ThreadPage> {
   int _sortType = 0; // 0=正序, 1=倒序, 2=热门
   bool _seeLz = false;
   int _currentPage = 1;
+
+  /// 只自动定位一次，之后用户自己滚。
+  bool _focusedReplies = false;
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
@@ -88,6 +96,19 @@ class _ThreadPageState extends State<ThreadPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_load(page: 1, postId: widget.initialPostId ?? 0, reset: true));
     });
+  }
+
+  /// 首屏渲染后把回复区顶到可视区顶部。
+  ///
+  /// 用 [_repliesKey] 的偏移量而不是估算高度：主楼长短差别很大，估算会飘。
+  void _scrollToReplies() {
+    final ctx = _repliesKey.currentContext;
+    if (ctx == null || !_scroll.hasClients) return;
+    final box = ctx.findRenderObject();
+    if (box is! RenderBox) return;
+    final target = _scroll.offset + box.localToGlobal(Offset.zero).dy -
+        pageTopInset(context) - 8;
+    _scroll.jumpTo(target.clamp(0.0, _scroll.position.maxScrollExtent));
   }
 
   @override
@@ -158,6 +179,12 @@ class _ThreadPageState extends State<ThreadPage> {
         _loading = false;
         _loadingMore = false;
       });
+      if (reset && widget.focusReplies && !_focusedReplies) {
+        _focusedReplies = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollToReplies();
+        });
+      }
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -552,6 +579,7 @@ class _ThreadPageState extends State<ThreadPage> {
         ],
         if (!settings.hideReply) ...[
           Row(
+            key: _repliesKey,
             children: [
               ..._threadActions(scheme),
               const Spacer(),

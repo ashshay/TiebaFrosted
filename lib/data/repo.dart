@@ -72,12 +72,14 @@ class TiebaRepo {
   Future<List<FollowedForum>> getFollowedForums() async {
     final list = await api.followedForums();
     final tops = store.topForums;
+    // 接口用 sort_type=3 请求，服务端已按等级排好；本地只把置顶提到最前，
+    // 其余保持服务端顺序。接口不下发 cur_score（原版 LikeForum 也没有这个字段），
+    // 所以「按经验值排」在客户端无从实现。
     final sorted = List<FollowedForum>.of(list)
       ..sort((a, b) {
         final at = tops.contains(a.forumName) ? 0 : 1;
         final bt = tops.contains(b.forumName) ? 0 : 1;
-        if (at != bt) return at.compareTo(bt);
-        return b.levelId.compareTo(a.levelId);
+        return at.compareTo(bt);
       });
     return sorted;
   }
