@@ -91,7 +91,7 @@ class SettingsPage extends StatelessWidget {
               FrostedListRow(
                 leading: const GlyphIcon(FrostedGlyphs.sort, size: 19),
                 title: const Text('使用习惯'),
-                subtitle: const Text('默认排序、原图策略、交互手势'),
+                subtitle: const Text('启动默认页、吧内排序、原图策略、交互手势'),
                 trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
                 onPressed: () => openSettingsHabit(context),
               ),

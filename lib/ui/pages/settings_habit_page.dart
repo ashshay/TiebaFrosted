@@ -21,6 +21,21 @@ class SettingsHabitPage extends StatelessWidget {
           bottom: MediaQuery.paddingOf(context).bottom + 24,
         ),
         children: [
+          const FrostedSectionTitle('启动默认页'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: FrostedCard(
+              child: SegmentedControl<int>(
+                value: settings.homeDefaultTab,
+                onChanged: settings.setHomeDefaultTab,
+                segments: const [
+                  (0, '推荐'),
+                  (1, '进吧'),
+                  (2, '关注'),
+                ],
+              ),
+            ),
+          ),
           const FrostedSectionTitle('吧内默认排序'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),

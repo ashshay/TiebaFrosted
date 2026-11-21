@@ -60,6 +60,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _tab = context.read<FrostedSettings>().homeDefaultTab;
     _scroll.addListener(_onScrollNearBottom);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -67,6 +68,12 @@ class _HomePageState extends State<HomePage> {
       _lastHomeRefresh = _chrome!.homeRefreshCount;
       _chrome!.addListener(_onChromeChange);
       unawaited(_loadRec(refresh: true));
+      // 默认栏不是「推荐」时，首屏也要把那一栏的数据拉起来。
+      if (_tab == 1) {
+        unawaited(_loadForums());
+      } else if (_tab == 2) {
+        unawaited(_loadConcern(refresh: true));
+      }
     });
   }
 
