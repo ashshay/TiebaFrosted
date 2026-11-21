@@ -486,30 +486,15 @@ class _ThreadPageState extends State<ThreadPage> {
         MediaQuery.paddingOf(context).bottom + 96,
       ),
       children: [
-        if (_thread.displayTitle.isNotEmpty || _thread.replyNum > 0) ...[
+        if (_thread.displayTitle.isNotEmpty) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Text(
-                    _thread.displayTitle,
-                    style: AppTextStyle.title2
-                        .of(context)
-                        .copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
-                if (_thread.replyNum > 0) ...[
-                  const SizedBox(width: 10),
-                  Text(
-                    '全部回复 (${formatCount(_thread.replyNum)})',
-                    style: AppTextStyle.subheadline
-                        .of(context)
-                        .copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                ],
-              ],
+            child: Text(
+              _thread.displayTitle,
+              textAlign: TextAlign.center,
+              style: AppTextStyle.title2
+                  .of(context)
+                  .copyWith(fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(height: 10),
@@ -520,6 +505,7 @@ class _ThreadPageState extends State<ThreadPage> {
             post: _firstFloor!,
             lzUserId: _lzUserId,
             isFirstFloor: true,
+            replyCount: _thread.replyNum,
             onAuthorTap: _firstFloor!.author.id > 0
                 ? () => openUserProfile(
                     context,

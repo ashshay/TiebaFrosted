@@ -22,6 +22,7 @@ class PostTile extends StatelessWidget {
     required this.post,
     this.lzUserId = 0,
     this.isFirstFloor = false,
+    this.replyCount,
     this.onAuthorTap,
     this.onAgreeTap,
     this.onReplyTap,
@@ -36,6 +37,9 @@ class PostTile extends StatelessWidget {
   final TiebaPost post;
   final int lzUserId;
   final bool isFirstFloor;
+
+  /// 覆盖回复按钮上的计数。首楼用它显示整贴回复数（主楼本身没有楼中楼）。
+  final int? replyCount;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onAgreeTap;
   final VoidCallback? onReplyTap;
@@ -281,8 +285,8 @@ class PostTile extends StatelessWidget {
                           ),
                           const SizedBox(width: 5),
                           Text(
-                            post.subPostNumber > 0
-                                ? formatCount(post.subPostNumber)
+                            (replyCount ?? post.subPostNumber) > 0
+                                ? formatCount(replyCount ?? post.subPostNumber)
                                 : '回复',
                             style: AppTextStyle.footnote
                                 .of(context)

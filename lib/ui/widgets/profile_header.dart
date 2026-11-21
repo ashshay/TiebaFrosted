@@ -105,7 +105,12 @@ class ProfileHeaderLayout {
       nameLeft: nameLeft,
       nameScale: nameScale,
       nameHeight: nameHeight,
-      barFill: ((p - 0.55) / 0.45).clamp(0.0, 1.0),
+      // 底色要比封面更早填满：封面在 coverRange 处移出后，列表就会从栏下穿过，
+      // 底色若还没满，栏里会透出半截正文（吧页折叠时看到的「2025-03-26」就是这样）。
+      barFill: ((p - 0.35) / (ProfileHeaderDelegate.coverRange - 0.35)).clamp(
+        0.0,
+        1.0,
+      ),
       buttonTint: Color.lerp(const Color(0xFFFFFFFF), onSurface, ease)!,
     );
   }
