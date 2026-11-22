@@ -330,10 +330,10 @@ class _SubPostPreviewLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.colorScheme;
-    final style = AppTextStyle.callout
+    final style = AppTextStyle.subheadline
         .of(context)
         .copyWith(color: scheme.onSurface);
-    final emoSize = (style.fontSize ?? 16.0) * 1.25;
+    final emoSize = (style.fontSize ?? 15.0) * 1.25;
 
     // 楼中楼预览曾经把富文本压成纯串，表情会露出 `#(滑稽)` 这种标记；
     // 这里按节点逐个拼，表情走内联图，拿不到图才退回标记文本。
@@ -384,7 +384,7 @@ class _SubPostPreviewLine extends StatelessWidget {
         children: [
           TextSpan(
             text: sub.author.displayName,
-            style: AppTextStyle.callout.of(context).copyWith(
+            style: AppTextStyle.subheadline.of(context).copyWith(
               color: scheme.primary,
               fontWeight: FontWeight.w600,
             ),

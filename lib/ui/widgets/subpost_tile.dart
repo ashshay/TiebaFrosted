@@ -88,7 +88,7 @@ class SubPostTile extends StatelessWidget {
                 const SizedBox(height: 6),
                 TiebaRichContent(
                   nodes: subPost.content,
-                  style: AppTextStyle.callout
+                  style: AppTextStyle.subheadline
                       .of(context)
                       .copyWith(color: scheme.onSurface),
                   onLinkTap: onLinkTap,

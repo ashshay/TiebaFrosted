@@ -259,13 +259,13 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    // 网格：自适应列宽、最小 180dp，对齐 TiebaLite 的 GridCells.Adaptive(180.dp)。
+    // 网格固定两列：自适应列宽在窄屏会挤成三列，吧名被截成「xperi…」这种。
     if (!settings.forumListSingle) {
       return GridView.builder(
         controller: _scroll,
         padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 180,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
           mainAxisExtent: 52,
           crossAxisSpacing: 8,
           mainAxisSpacing: 8,
