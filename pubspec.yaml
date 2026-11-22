@@ -2,7 +2,7 @@ name: tieba_frosted
 description: "TiebaFrosted — 贴吧客户端，prism_ui 设计语言，Flutter 实现。"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.10.0
