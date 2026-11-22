@@ -17,6 +17,7 @@ import '../widgets/forum_card.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/press_scale.dart';
 import '../widgets/refresh.dart';
+import '../widgets/visited_forums_bar.dart';
 
 /// 首页：进吧（关注列表）与发现（热议）两栏，顶栏分段切换。
 ///
@@ -230,6 +231,14 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
+    final header = settings.homeShowHistoryForum && store.visitedForums.isNotEmpty
+        ? VisitedForumsBar(
+            forums: store.visitedForums,
+            onForumTap: (r) => openForum(context, r.itemId),
+            onOpenAll: () => openHistory(context),
+          )
+        : null;
+
     Widget buildForum(int idx, {required bool compact}) {
       final f = _forums[idx];
       final pinned = store.isTopForum(f.forumName);
@@ -261,25 +270,44 @@ class _HomePageState extends State<HomePage> {
 
     // 网格固定两列：自适应列宽在窄屏会挤成三列，吧名被截成「xperi…」这种。
     if (!settings.forumListSingle) {
-      return GridView.builder(
+      return CustomScrollView(
         controller: _scroll,
-        padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisExtent: 52,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        itemCount: _forums.length,
-        itemBuilder: (_, idx) => buildForum(idx, compact: true),
+        slivers: [
+          if (header != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(14, top + 8, 14, 0),
+                child: header,
+              ),
+            ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(14, 8, 14, bottom),
+            sliver: SliverGrid.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisExtent: 52,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: _forums.length,
+              itemBuilder: (_, idx) => buildForum(idx, compact: true),
+            ),
+          ),
+        ],
       );
     }
     return ListView.separated(
       controller: _scroll,
       padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
-      itemCount: _forums.length,
+      itemCount: _forums.length + (header != null ? 1 : 0),
       separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (_, idx) => buildForum(idx, compact: false),
+      itemBuilder: (_, idx) {
+        if (header != null) {
+          if (idx == 0) return header;
+          return buildForum(idx - 1, compact: false);
+        }
+        return buildForum(idx, compact: false);
+      },
     );
   }
 }

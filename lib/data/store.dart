@@ -20,11 +20,15 @@ class FrostedStore extends ChangeNotifier {
   String? _activeUid;
   List<BlockRule> _blocks = [];
   Set<String> _topForums = {};
+  List<HistoryRecord> _visitedForums = [];
 
   List<AccountRecord> get accounts => List.unmodifiable(_accounts);
   String? get activeUid => _activeUid;
   List<BlockRule> get blocks => List.unmodifiable(_blocks);
   Set<String> get topForums => Set.unmodifiable(_topForums);
+
+  /// 最近进过的吧，首页「经过贴吧」横滑条用。进吧写入后自动刷新。
+  List<HistoryRecord> get visitedForums => List.unmodifiable(_visitedForums);
 
   AccountRecord? get currentAccount {
     if (_activeUid == null || _activeUid!.isEmpty) return null;
@@ -48,6 +52,7 @@ class FrostedStore extends ChangeNotifier {
     _accounts = await db.getAccounts();
     _blocks = await db.getBlocks();
     _topForums = await db.getTopForums();
+    _visitedForums = await db.getHistory(type: 1, limit: 20);
     final savedUid = prefs.getString('active_account_uid');
     if (savedUid != null && _accounts.any((a) => a.uid == savedUid)) {
       _activeUid = savedUid;
@@ -232,8 +237,8 @@ class FrostedStore extends ChangeNotifier {
   Future<void> recordForumHistory({
     required String forumName,
     String avatar = '',
-  }) {
-    return db.upsertHistory(
+  }) async {
+    await db.upsertHistory(
       HistoryRecord(
         type: 1,
         itemId: forumName,
@@ -244,5 +249,7 @@ class FrostedStore extends ChangeNotifier {
         timestamp: DateTime.now().millisecondsSinceEpoch,
       ),
     );
+    _visitedForums = await db.getHistory(type: 1, limit: 20);
+    notifyListeners();
   }
 }

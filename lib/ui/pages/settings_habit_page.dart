@@ -85,6 +85,14 @@ class SettingsHabitPage extends StatelessWidget {
                 ),
               ),
               FrostedListRow(
+                title: const Text('首页显示「经过贴吧」'),
+                subtitle: const Text('顶部横滑展示最近进过的吧'),
+                trailing: Switch(
+                  value: settings.homeShowHistoryForum,
+                  onChanged: settings.setHomeShowHistoryForum,
+                ),
+              ),
+              FrostedListRow(
                 title: const Text('左右滑动切换动态页'),
                 subtitle: const Text('在推荐、关注、热榜之间横滑切换'),
                 trailing: Switch(

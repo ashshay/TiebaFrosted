@@ -41,6 +41,9 @@ class FrostedSettings extends ChangeNotifier {
   /// 动态页左右滑动切换「推荐 / 关注 / 热榜」。
   bool swipeSwitchFeed = true;
 
+  /// 首页顶部显示「经过贴吧」横滑条。
+  bool homeShowHistoryForum = true;
+
   /// 启动时停在底栏哪一格：0 首页 / 1 动态 / 2 消息 / 3 我的。
   int startTab = 0;
 
@@ -90,6 +93,7 @@ class FrostedSettings extends ChangeNotifier {
     hideMedia = _prefs.getBool('hide_media') ?? false;
     forumListSingle = _prefs.getBool('forum_list_single') ?? false;
     swipeSwitchFeed = _prefs.getBool('swipe_switch_feed') ?? true;
+    homeShowHistoryForum = _prefs.getBool('home_show_history_forum') ?? true;
     startTab = (_prefs.getInt('start_tab') ?? 0).clamp(0, 3);
 
     enableBlock = _prefs.getBool('enable_block') ?? true;
@@ -204,6 +208,12 @@ class FrostedSettings extends ChangeNotifier {
   Future<void> setSwipeSwitchFeed(bool value) async {
     swipeSwitchFeed = value;
     await _prefs.setBool('swipe_switch_feed', value);
+    notifyListeners();
+  }
+
+  Future<void> setHomeShowHistoryForum(bool value) async {
+    homeShowHistoryForum = value;
+    await _prefs.setBool('home_show_history_forum', value);
     notifyListeners();
   }
 
