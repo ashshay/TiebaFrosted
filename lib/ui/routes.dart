@@ -12,6 +12,7 @@ import '../data/models.dart';
 import '../data/native_channels.dart';
 import '../data/oksign_notifier.dart';
 import '../data/repo.dart';
+import '../data/settings.dart';
 import '../data/store.dart';
 import 'nav.dart';
 import 'pages/about_page.dart';
@@ -303,6 +304,8 @@ Future<void> openAbout(BuildContext context) =>
     pushPage(context, const AboutPage());
 
 /// 统一贴吧链接分发器（支持帖子、贴吧、用户与外部网页）。
+///
+/// 站外链接按「使用内置浏览器」设置决定去处：开着进 [WebPage]，关掉交给系统浏览器。
 Future<void> openTiebaUrl(BuildContext context, String rawUrl) {
   final parsed = parseTiebaLink(rawUrl);
   return switch (parsed) {
@@ -319,8 +322,28 @@ Future<void> openTiebaUrl(BuildContext context, String rawUrl) {
       uid: uid,
       portrait: portrait ?? '',
     ),
-    TiebaWebLink(:final url) => openWeb(context, url),
+    TiebaWebLink(:final url) => openExternalUrl(context, url),
   };
+}
+
+/// 打开站外链接：内置浏览器或系统浏览器，取决于设置。
+Future<void> openExternalUrl(BuildContext context, String url) async {
+  final trimmed = url.trim();
+  if (trimmed.isEmpty) return;
+  final scheme = Uri.tryParse(trimmed)?.scheme.toLowerCase() ?? '';
+  // 非 http(s) 的（mailto:、tg: 之类）只有系统能处理。
+  if (scheme != 'http' && scheme != 'https') {
+    await NativeChannels.openInBrowser(trimmed);
+    return;
+  }
+  if (context.read<FrostedSettings>().useWebView) {
+    await openWeb(context, trimmed);
+    return;
+  }
+  final ok = await NativeChannels.openInBrowser(trimmed);
+  if (!ok && context.mounted) {
+    showFrostedToast(context, '没有找到可用的系统浏览器');
+  }
 }
 
 /// 帖子卡片长按快捷操作菜单。

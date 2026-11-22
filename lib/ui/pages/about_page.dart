@@ -102,20 +102,18 @@ class _AboutPageState extends State<AboutPage> {
                 title: const Text('源工程 TiebaLite'),
                 subtitle: const Text('GPL-3.0 · 协议与容错规则参照'),
                 trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
-                onPressed: () => openWeb(
+                onPressed: () => openExternalUrl(
                   context,
                   'https://github.com/HuanCheng65/TiebaLite',
-                  title: 'TiebaLite',
                 ),
               ),
               FrostedListRow(
                 title: const Text('界面引擎 prism_ui'),
                 subtitle: const Text('GPL-3.0 · 来自 FlClash'),
                 trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
-                onPressed: () => openWeb(
+                onPressed: () => openExternalUrl(
                   context,
                   'https://github.com/chen08209/FlClash',
-                  title: 'FlClash / prism_ui',
                 ),
               ),
               const FrostedListRow(

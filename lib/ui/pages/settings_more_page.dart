@@ -33,6 +33,18 @@ class SettingsMorePage extends StatelessWidget {
                   onChanged: settings.setUseHttps,
                 ),
               ),
+              FrostedListRow(
+                title: const Text('使用内置浏览器'),
+                subtitle: Text(
+                  settings.useWebView
+                      ? '站外链接在应用内打开，可随时切到系统浏览器'
+                      : '站外链接交给系统浏览器打开',
+                ),
+                trailing: Switch(
+                  value: settings.useWebView,
+                  onChanged: settings.setUseWebView,
+                ),
+              ),
             ],
           ),
           const FrostedSectionTitle('缓存与数据'),

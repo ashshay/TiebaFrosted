@@ -44,6 +44,26 @@ TiebaLink parseTiebaLink(String raw) {
   final host = uri.host.toLowerCase();
   final path = uri.path;
 
+  // 贴吧客户端自己的跳转协议：preview_file 带真实地址，其余是客户端专有能力。
+  // 实际链接形如 `tiebaclient://action/preview_file?url=…`，动作在路径里。
+  if (scheme == 'tiebaclient') {
+    final action = uri.queryParameters['action'] ??
+        (path.startsWith('/') ? path.substring(1) : path);
+    if (action == 'preview_file') {
+      final real = uri.queryParameters['url'];
+      if (real != null && real.isNotEmpty) return parseTiebaLink(real);
+    }
+    return TiebaWebLink(trimmed);
+  }
+
+  // 贴吧的跳转中转页，真实地址在 url 参数里，偶尔会被拼成 http://https://。
+  if (path == '/mo/q/checkurl') {
+    final real = uri.queryParameters['url'];
+    if (real != null && real.isNotEmpty) {
+      return parseTiebaLink(real.replaceFirst('http://https://', 'https://'));
+    }
+  }
+
   if (scheme == 'tieba') {
     final tid = int.tryParse(uri.queryParameters['tid'] ?? uri.queryParameters['kz'] ?? '');
     if (tid != null && tid > 0) {

@@ -170,6 +170,39 @@ void main() {
       expect((nodes[2] as RichTextNode).text, '看看 ');
       expect((nodes[3] as RichLinkNode).url, 'https://tieba.baidu.com/p/123');
     });
+
+    test('unwraps the checkurl redirect to the real target', () {
+      final link = parseTiebaLink(
+        'https://tieba.baidu.com/mo/q/checkurl?url=https%3A%2F%2Fexample.com%2Fa',
+      );
+      expect((link as TiebaWebLink).url, 'https://example.com/a');
+    });
+
+    test('repairs the doubled scheme checkurl sometimes carries', () {
+      final link = parseTiebaLink(
+        'https://tieba.baidu.com/mo/q/checkurl?url=http%3A%2F%2Fhttps%3A%2F%2Fexample.com',
+      );
+      expect((link as TiebaWebLink).url, 'https://example.com');
+    });
+
+    test('checkurl pointing at a thread opens the thread', () {
+      final link = parseTiebaLink(
+        'https://tieba.baidu.com/mo/q/checkurl?url=https%3A%2F%2Ftieba.baidu.com%2Fp%2F777',
+      );
+      expect((link as TiebaThreadLink).threadId, 777);
+    });
+
+    test('tiebaclient preview_file unwraps to its url', () {
+      final link = parseTiebaLink(
+        'tiebaclient://action/preview_file?url=https%3A%2F%2Fexample.com%2Fimg.png',
+      );
+      expect((link as TiebaWebLink).url, 'https://example.com/img.png');
+    });
+
+    test('other tiebaclient actions fall back to a web link', () {
+      final link = parseTiebaLink('tiebaclient://action/unknown');
+      expect(link, isA<TiebaWebLink>());
+    });
   });
 
   group('ProfileHeaderLayout geometry regression', () {

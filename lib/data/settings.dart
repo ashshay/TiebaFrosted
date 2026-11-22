@@ -44,6 +44,9 @@ class FrostedSettings extends ChangeNotifier {
   /// 首页顶部显示「经过贴吧」横滑条。
   bool homeShowHistoryForum = true;
 
+  /// 站外链接一律用内置浏览器打开；关掉后交给系统浏览器。
+  bool useWebView = true;
+
   /// 启动时停在底栏哪一格：0 首页 / 1 动态 / 2 消息 / 3 我的。
   int startTab = 0;
 
@@ -94,6 +97,7 @@ class FrostedSettings extends ChangeNotifier {
     forumListSingle = _prefs.getBool('forum_list_single') ?? false;
     swipeSwitchFeed = _prefs.getBool('swipe_switch_feed') ?? true;
     homeShowHistoryForum = _prefs.getBool('home_show_history_forum') ?? true;
+    useWebView = _prefs.getBool('use_webview') ?? true;
     startTab = (_prefs.getInt('start_tab') ?? 0).clamp(0, 3);
 
     enableBlock = _prefs.getBool('enable_block') ?? true;
@@ -214,6 +218,12 @@ class FrostedSettings extends ChangeNotifier {
   Future<void> setHomeShowHistoryForum(bool value) async {
     homeShowHistoryForum = value;
     await _prefs.setBool('home_show_history_forum', value);
+    notifyListeners();
+  }
+
+  Future<void> setUseWebView(bool value) async {
+    useWebView = value;
+    await _prefs.setBool('use_webview', value);
     notifyListeners();
   }
 
