@@ -30,18 +30,8 @@ class FrostedShell extends StatefulWidget {
   State<FrostedShell> createState() => _FrostedShellState();
 }
 
-class _FrostedShellState extends State<FrostedShell>
-    with SingleTickerProviderStateMixin {
+class _FrostedShellState extends State<FrostedShell> {
   int _index = 0;
-  late final AnimationController _tabFade = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 180),
-    value: 1.0,
-  );
-  late final CurvedAnimation _tabFadeCurve = CurvedAnimation(
-    parent: _tabFade,
-    curve: Curves.easeOutCubic,
-  );
   final GlobalKey _dockKey = GlobalKey();
   int? _lastTapIndex;
   DateTime? _lastTapAt;
@@ -73,8 +63,6 @@ class _FrostedShellState extends State<FrostedShell>
   void dispose() {
     _deepLinkSub?.cancel();
     _longPressTimer?.cancel();
-    _tabFadeCurve.dispose();
-    _tabFade.dispose();
     super.dispose();
   }
 
@@ -82,12 +70,6 @@ class _FrostedShellState extends State<FrostedShell>
     context.read<ChromeController>().setHidden(false);
     if (index == _index) return;
     setState(() => _index = index);
-    if (!(MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
-      _tabFade
-        ..stop()
-        ..value = 0.0
-        ..forward();
-    }
   }
 
   void _handleDockPointerDown(PointerDownEvent event) {
@@ -238,15 +220,7 @@ class _FrostedShellState extends State<FrostedShell>
           Positioned.fill(
             child: BottomInsetScope(
               inset: NavigationDock.insetOf(context),
-              child: AnimatedBuilder(
-                animation: _tabFadeCurve,
-                builder: (context, child) {
-                  final t = _tabFadeCurve.value;
-                  if (t >= 1.0) return child!;
-                  return Opacity(opacity: 0.86 + 0.14 * t, child: child);
-                },
-                child: IndexedStack(index: _index, children: pages),
-              ),
+              child: IndexedStack(index: _index, children: pages),
             ),
           ),
           Positioned(

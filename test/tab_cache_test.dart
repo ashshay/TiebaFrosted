@@ -15,6 +15,8 @@ import 'package:tieba_frosted/data/repo.dart';
 import 'package:tieba_frosted/data/settings.dart';
 import 'package:tieba_frosted/data/store.dart';
 import 'package:tieba_frosted/data/tab_cache.dart';
+import 'package:tieba_frosted/ui/pages/feed_page.dart';
+import 'package:tieba_frosted/ui/pages/home_page.dart';
 
 void main() {
   group('TabSnapshotCache disk persistence', () {
@@ -182,6 +184,14 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        // 记录切页前的 State 实例，锁死切页过程中绝不发生子树卸载重建
+        final homeStateBefore = tester.state(
+          find.byType(HomePage, skipOffstage: false),
+        );
+        final feedStateBefore = tester.state(
+          find.byType(FeedPage, skipOffstage: false),
+        );
+
         // 依次首次切换到 动态 -> 消息 -> 我的：全部命中本地快照，0 次网络重载
         expect(find.text('缓存测试吧'), findsOneWidget);
         await tester.tap(find.text('动态'));
@@ -196,6 +206,22 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('99'), findsOneWidget);
 
+        expect(
+          identical(
+            tester.state(find.byType(HomePage, skipOffstage: false)),
+            homeStateBefore,
+          ),
+          isTrue,
+          reason: '切换底栏不得重建 HomePage State',
+        );
+        expect(
+          identical(
+            tester.state(find.byType(FeedPage, skipOffstage: false)),
+            feedStateBefore,
+          ),
+          isTrue,
+          reason: '切换底栏不得重建 FeedPage State',
+        );
         expect(requestedPaths, isEmpty);
 
         // 双击底栏「消息」-> 触发手动刷新

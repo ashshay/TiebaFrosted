@@ -489,7 +489,6 @@ class _ZoomableImageSlideState extends State<_ZoomableImageSlide>
       child: ValueListenableBuilder<Offset>(
         valueListenable: _dragOffset,
         builder: (context, offset, child) {
-          if (offset == Offset.zero) return child!;
           final dragFraction = (offset.dy.abs() / 360.0).clamp(0.0, 1.0);
           final scale = 1.0 - 0.18 * dragFraction;
           return Transform.translate(

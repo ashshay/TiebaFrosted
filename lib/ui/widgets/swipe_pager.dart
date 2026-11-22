@@ -158,21 +158,15 @@ class _SwipePagerState extends State<SwipePager>
 
   @override
   Widget build(BuildContext context) {
+    // 始终保持固定 Transform.translate 树结构且不套 Opacity（避免动态包裹导致
+    // IndexedStack 子树重建，以及 Opacity 的 saveLayer 引起毛玻璃顶栏闪烁）。
     final content = AnimatedBuilder(
       animation: Listenable.merge([_dragVisualDx, _switchCurve]),
       builder: (context, child) {
         final t = _switchCurve.value;
-        final slideIn = _switchDirection * 22.0 * (1 - t);
+        final slideIn = _switchDirection * 18.0 * (1 - t);
         final tx = _dragVisualDx.value + slideIn;
-        final opacity = t < 1.0 ? (0.82 + 0.18 * t) : 1.0;
-        Widget result = child!;
-        if (tx != 0) {
-          result = Transform.translate(offset: Offset(tx, 0), child: result);
-        }
-        if (opacity < 1.0) {
-          result = Opacity(opacity: opacity, child: result);
-        }
-        return result;
+        return Transform.translate(offset: Offset(tx, 0), child: child);
       },
       child: widget.child,
     );
