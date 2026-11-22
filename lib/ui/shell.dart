@@ -21,7 +21,8 @@ import 'widgets/remote_image.dart';
 
 /// 应用主壳：四格页面（首页 / 动态 / 消息 / 我的）+ Prism 液态玻璃悬浮底栏。
 ///
-/// 「首页」里是 进吧 ⇄ 发现，「动态」里是 推荐 ⇄ 关注；两格各自支持双击刷新。
+/// 四格页面常驻 IndexedStack 保活（首次切换不触发重载），
+/// 「首页」「动态」「消息」支持双击底栏图标回顶并手动刷新。
 class FrostedShell extends StatefulWidget {
   const FrostedShell({super.key});
 
@@ -32,8 +33,6 @@ class FrostedShell extends StatefulWidget {
 class _FrostedShellState extends State<FrostedShell>
     with SingleTickerProviderStateMixin {
   int _index = 0;
-  final List<bool> _mountedTabs = [false, false, false, false];
-  String _lastAccountKey = '';
   late final AnimationController _tabFade = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 180),
@@ -54,7 +53,6 @@ class _FrostedShellState extends State<FrostedShell>
   void initState() {
     super.initState();
     _index = context.read<FrostedSettings>().startTab;
-    _mountedTabs[_index] = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_handleInitialDeepLink());
     });
@@ -83,10 +81,7 @@ class _FrostedShellState extends State<FrostedShell>
   void _onDockSelected(int index) {
     context.read<ChromeController>().setHidden(false);
     if (index == _index) return;
-    setState(() {
-      _index = index;
-      _mountedTabs[index] = true;
-    });
+    setState(() => _index = index);
     if (!(MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
       _tabFade
         ..stop()
@@ -128,8 +123,8 @@ class _FrostedShellState extends State<FrostedShell>
     if (box is! RenderBox) return;
     final index = _dockIndexAt(box.globalToLocal(event.position), box.size);
     if (index < 0) return;
-    // 只有「首页」与「动态」有可刷新的内容，其余格保持单击切页。
-    if (index > 1) {
+    // 「首页」「动态」「消息」支持双击底栏手动刷新并回顶，「我的」保持单击切页。
+    if (index > 2) {
       _lastTapIndex = null;
       return;
     }
@@ -140,18 +135,19 @@ class _FrostedShellState extends State<FrostedShell>
         now.difference(lastAt) <= const Duration(milliseconds: 320)) {
       _lastTapIndex = null;
       _lastTapAt = null;
+      HapticFeedback.lightImpact();
       final chrome = context.read<ChromeController>();
       chrome.setHidden(false);
       if (_index != index) {
-        setState(() {
-          _index = index;
-          _mountedTabs[index] = true;
-        });
+        setState(() => _index = index);
       }
-      if (index == 0) {
-        chrome.requestHomeRefresh();
-      } else {
-        chrome.requestFeedRefresh();
+      switch (index) {
+        case 0:
+          chrome.requestHomeRefresh();
+        case 1:
+          chrome.requestFeedRefresh();
+        case 2:
+          chrome.requestNotificationsRefresh();
       }
     } else {
       _lastTapIndex = index;
@@ -228,25 +224,11 @@ class _FrostedShellState extends State<FrostedShell>
         : '';
 
     final accountKey = store.activeUid ?? 'guest';
-    if (_lastAccountKey != accountKey) {
-      _lastAccountKey = accountKey;
-      for (var i = 0; i < _mountedTabs.length; i++) {
-        _mountedTabs[i] = i == _index;
-      }
-    }
     final pages = <Widget>[
-      _mountedTabs[0]
-          ? HomePage(key: ValueKey('home-$accountKey'))
-          : const SizedBox.shrink(),
-      _mountedTabs[1]
-          ? FeedPage(key: ValueKey('feed-$accountKey'))
-          : const SizedBox.shrink(),
-      _mountedTabs[2]
-          ? NotificationsPage(key: ValueKey('msg-$accountKey'))
-          : const SizedBox.shrink(),
-      _mountedTabs[3]
-          ? MePage(key: ValueKey('me-$accountKey'))
-          : const SizedBox.shrink(),
+      HomePage(key: ValueKey('home-$accountKey')),
+      FeedPage(key: ValueKey('feed-$accountKey')),
+      NotificationsPage(key: ValueKey('msg-$accountKey')),
+      MePage(key: ValueKey('me-$accountKey')),
     ];
 
     return Surface(

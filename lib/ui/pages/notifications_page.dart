@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../data/models.dart';
 import '../../data/repo.dart';
 import '../../data/store.dart';
+import '../../data/tab_cache.dart';
 import '../chrome.dart';
 import '../routes.dart';
 import '../theme.dart';
@@ -16,6 +17,8 @@ import '../widgets/refresh.dart';
 import '../widgets/remote_image.dart';
 
 /// 消息通知中心：回复我的 / @我的。
+///
+/// 两个分栏各自保活并接入本地快照缓存，首次切换不重载，支持下拉与底栏双击回顶刷新。
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
 
@@ -23,81 +26,240 @@ class NotificationsPage extends StatefulWidget {
   State<NotificationsPage> createState() => _NotificationsPageState();
 }
 
+class _NotifyTabState {
+  final ScrollController scroll = ScrollController();
+  List<NotificationItem> items = [];
+  bool loading = false;
+  bool loadingMore = false;
+  bool hasMore = false;
+  bool loadedOnce = false;
+  int page = 1;
+  String? error;
+
+  void dispose() => scroll.dispose();
+}
+
 class _NotificationsPageState extends State<NotificationsPage> {
-  final ScrollController _scroll = ScrollController();
+  final List<_NotifyTabState> _states = [_NotifyTabState(), _NotifyTabState()];
+  ChromeController? _chrome;
+  int _lastNotifyRefresh = 0;
   int _tab = 0; // 0=回复我的, 1=@我的
-  List<NotificationItem> _items = [];
-  bool _loading = false;
-  bool _loadingMore = false;
-  bool _hasMore = false;
-  int _page = 1;
-  String? _error;
+
+  String get _accountKey => context.read<FrostedStore>().activeUid ?? 'guest';
 
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(_onScroll);
+    _states[0].scroll.addListener(() => _onScroll(0));
+    _states[1].scroll.addListener(() => _onScroll(1));
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _chrome = context.read<ChromeController>();
+      _lastNotifyRefresh = _chrome!.notificationsRefreshCount;
+      _chrome!.addListener(_onChromeChange);
       if (context.read<FrostedStore>().isLoggedIn) {
-        unawaited(_load(refresh: true));
+        unawaited(_restoreOrLoad(0));
       }
     });
   }
 
   @override
   void dispose() {
-    _scroll.dispose();
+    _chrome?.removeListener(_onChromeChange);
+    for (final s in _states) {
+      s.dispose();
+    }
     super.dispose();
   }
 
-  void _onScroll() {
-    if (!_scroll.hasClients) return;
-    if (_scroll.offset >= _scroll.position.maxScrollExtent - 300 &&
-        _hasMore &&
-        !_loading &&
-        !_loadingMore) {
-      unawaited(_load(refresh: false));
+  void _onChromeChange() {
+    if (!mounted) return;
+    final count = context.read<ChromeController>().notificationsRefreshCount;
+    if (count == _lastNotifyRefresh) return;
+    _lastNotifyRefresh = count;
+    final scroll = _states[_tab].scroll;
+    if (scroll.hasClients && scroll.offset > 0) {
+      scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    unawaited(_load(_tab, refresh: true));
+  }
+
+  void _onScroll(int tab) {
+    final st = _states[tab];
+    if (!st.scroll.hasClients) return;
+    if (st.scroll.offset >= st.scroll.position.maxScrollExtent - 300 &&
+        st.hasMore &&
+        !st.loading &&
+        !st.loadingMore) {
+      unawaited(_load(tab, refresh: false));
     }
   }
 
-  Future<void> _load({required bool refresh}) async {
+  Future<void> _restoreOrLoad(int tab) async {
+    final st = _states[tab];
+    if (st.loadedOnce) return;
+    final repo = context.read<TiebaRepo>();
+    if (!repo.isLoggedIn) {
+      if (mounted) {
+        setState(() {
+          st.items = [];
+          st.loading = false;
+          st.loadedOnce = true;
+        });
+      }
+      return;
+    }
+    final cached = await TabSnapshotCache.instance.readNotifications(
+      _accountKey,
+      tab: tab,
+    );
+    if (!mounted) return;
+    if (cached != null) {
+      setState(() {
+        st.items = cached.items;
+        st.hasMore = cached.hasMore;
+        st.loading = false;
+        st.error = null;
+        st.loadedOnce = true;
+      });
+      return;
+    }
+    await _load(tab, refresh: true);
+  }
+
+  Future<void> _load(int tab, {required bool refresh}) async {
+    final st = _states[tab];
     final repo = context.read<TiebaRepo>();
     if (!repo.isLoggedIn) {
       setState(() {
-        _items = [];
-        _loading = false;
+        st.items = [];
+        st.loading = false;
+        st.loadedOnce = true;
       });
       return;
     }
     if (refresh) {
       setState(() {
-        _loading = _items.isEmpty;
-        _error = null;
+        st.loading = st.items.isEmpty;
+        st.error = null;
       });
     } else {
-      setState(() => _loadingMore = true);
+      setState(() => st.loadingMore = true);
     }
     try {
-      final nextPage = refresh ? 1 : _page + 1;
-      final res = _tab == 0
+      final nextPage = refresh ? 1 : st.page + 1;
+      final res = tab == 0
           ? await repo.getReplyMe(page: nextPage)
           : await repo.getAtMe(page: nextPage);
       if (!mounted) return;
       setState(() {
-        _items = refresh ? res.items : [..._items, ...res.items];
-        _page = nextPage;
-        _hasMore = res.hasMore;
-        _loading = false;
-        _loadingMore = false;
+        st.items = refresh ? res.items : [...st.items, ...res.items];
+        st.page = nextPage;
+        st.hasMore = res.hasMore;
+        st.loading = false;
+        st.loadingMore = false;
+        st.loadedOnce = true;
       });
+      unawaited(
+        TabSnapshotCache.instance.saveNotifications(
+          _accountKey,
+          tab: tab,
+          items: st.items,
+          hasMore: st.hasMore,
+        ),
+      );
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = cleanError(e);
-        _loading = false;
-        _loadingMore = false;
+        st.error = cleanError(e);
+        st.loading = false;
+        st.loadingMore = false;
+        st.loadedOnce = true;
       });
     }
+  }
+
+  void _switchTab(int next) {
+    if (next == _tab) return;
+    setState(() => _tab = next);
+    context.read<ChromeController>().setHidden(false);
+    if (!_states[next].loadedOnce && context.read<FrostedStore>().isLoggedIn) {
+      unawaited(_restoreOrLoad(next));
+    }
+  }
+
+  Widget _buildTab(
+    BuildContext context,
+    int tab,
+    FrostedStore store,
+    double top,
+    double bottom,
+  ) {
+    if (!store.isLoggedIn) {
+      return FrostedEmpty(
+        title: '登录后查看消息通知',
+        message: '查看回复我的帖子、楼中楼与 @提及',
+        icon: FrostedGlyphs.bell,
+        action: FilledButton(
+          onPressed: () => openLogin(context),
+          child: const Text('登录贴吧'),
+        ),
+      );
+    }
+    final st = _states[tab];
+    if (!st.loadedOnce && !st.loading && st.items.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    if (st.loading && st.items.isEmpty) {
+      return const FrostedLoading(label: '加载消息中...');
+    }
+    if (st.error != null && st.items.isEmpty) {
+      return FrostedEmpty(
+        title: '加载消息失败',
+        message: st.error,
+        icon: FrostedGlyphs.bell,
+        action: FilledButton(
+          onPressed: () => _load(tab, refresh: true),
+          child: const Text('重试'),
+        ),
+      );
+    }
+    if (st.items.isEmpty) {
+      return const FrostedEmpty(
+        title: '暂无新消息',
+        message: '有新回复或 @提醒时会显示在这里',
+        icon: FrostedGlyphs.bell,
+      );
+    }
+    return ListView.separated(
+      controller: st.scroll,
+      padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
+      itemCount: st.items.length + (st.loadingMore ? 1 : 0),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, idx) {
+        if (idx >= st.items.length) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: FrostedLoading(),
+          );
+        }
+        final item = st.items[idx];
+        return _NotificationCard(
+          item: item,
+          onTap: () => openThread(
+            context,
+            threadId: item.threadId,
+            forumName: item.forumName,
+            postId: item.postId > 0 ? item.postId : null,
+            initialTitle: item.title,
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -114,16 +276,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           width: 176,
           child: SegmentedControl<int>(
             value: _tab,
-            onChanged: (v) {
-              if (v == _tab) return;
-              setState(() {
-                _tab = v;
-                _items = [];
-                _page = 1;
-                _hasMore = false;
-              });
-              unawaited(_load(refresh: true));
-            },
+            onChanged: _switchTab,
             segments: const [
               (0, '回复我'),
               (1, '@提到'),
@@ -135,69 +288,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
         onHiddenChanged: chrome.setHidden,
         child: FrostedRefresh(
           topInset: top,
-          onRefresh: () => _load(refresh: true),
-          child: !store.isLoggedIn
-              ? FrostedEmpty(
-                  title: '登录后查看消息通知',
-                  message: '查看回复我的帖子、楼中楼与 @提及',
-                  icon: FrostedGlyphs.bell,
-                  action: FilledButton(
-                    onPressed: () => openLogin(context),
-                    child: const Text('登录贴吧'),
-                  ),
-                )
-              : _loading && _items.isEmpty
-                  ? const FrostedLoading(label: '加载消息中...')
-                  : _error != null && _items.isEmpty
-                      ? FrostedEmpty(
-                          title: '加载消息失败',
-                          message: _error,
-                          icon: FrostedGlyphs.bell,
-                          action: FilledButton(
-                            onPressed: () => _load(refresh: true),
-                            child: const Text('重试'),
-                          ),
-                        )
-                      : _items.isEmpty
-                          ? const FrostedEmpty(
-                              title: '暂无新消息',
-                              message: '有新回复或 @提醒时会显示在这里',
-                              icon: FrostedGlyphs.bell,
-                            )
-                          : ListView.separated(
-                              controller: _scroll,
-                              padding: EdgeInsets.fromLTRB(
-                                14,
-                                top + 8,
-                                14,
-                                bottom,
-                              ),
-                              itemCount:
-                                  _items.length + (_loadingMore ? 1 : 0),
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox(height: 10),
-                              itemBuilder: (context, idx) {
-                                if (idx >= _items.length) {
-                                  return const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 16),
-                                    child: FrostedLoading(),
-                                  );
-                                }
-                                final item = _items[idx];
-                                return _NotificationCard(
-                                  item: item,
-                                  onTap: () => openThread(
-                                    context,
-                                    threadId: item.threadId,
-                                    forumName: item.forumName,
-                                    postId: item.postId > 0
-                                        ? item.postId
-                                        : null,
-                                    initialTitle: item.title,
-                                  ),
-                                );
-                              },
-                            ),
+          onRefresh: () => _load(_tab, refresh: true),
+          child: IndexedStack(
+            index: _tab,
+            children: [
+              _buildTab(context, 0, store, top, bottom),
+              _buildTab(context, 1, store, top, bottom),
+            ],
+          ),
         ),
       ),
     );

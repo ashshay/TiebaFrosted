@@ -10,6 +10,7 @@ import '../../data/models.dart';
 import '../../data/repo.dart';
 import '../../data/settings.dart';
 import '../../data/store.dart';
+import '../../data/tab_cache.dart';
 import '../chrome.dart';
 import '../routes.dart';
 import '../widgets/common.dart';
@@ -39,6 +40,8 @@ class _FeedPageState extends State<FeedPage> {
   final ScrollController _concernScroll = ScrollController();
   final GlobalKey<ExploreViewState> _exploreKey = GlobalKey<ExploreViewState>();
   ChromeController? _chrome;
+  FrostedSettings? _settings;
+  int _lastDefaultFeedTab = 0;
   int _tab = 0; // 0 = 推荐, 1 = 关注, 2 = 热榜
   bool _exploreMounted = false;
   int _lastFeedRefresh = 0;
@@ -61,12 +64,15 @@ class _FeedPageState extends State<FeedPage> {
   bool _concernHasMore = true;
   bool _concernLoadedOnce = false;
 
+  String get _accountKey => context.read<FrostedStore>().activeUid ?? 'guest';
+
   @override
   void initState() {
     super.initState();
-    _tab = context.read<FrostedSettings>().defaultFeedTab.clamp(0, 2);
-    if (_tab == 0) _recLoading = true;
-    if (_tab == 1) _concernLoading = true;
+    _settings = context.read<FrostedSettings>();
+    _lastDefaultFeedTab = _settings!.defaultFeedTab.clamp(0, 2);
+    _tab = _lastDefaultFeedTab;
+    _settings!.addListener(_onSettingsChange);
     if (_tab == 2) _exploreMounted = true;
     _recScroll.addListener(_onRecScrollNearBottom);
     _concernScroll.addListener(_onConcernScrollNearBottom);
@@ -76,19 +82,72 @@ class _FeedPageState extends State<FeedPage> {
       _lastFeedRefresh = _chrome!.feedRefreshCount;
       _chrome!.addListener(_onChromeChange);
       if (_tab == 0) {
-        unawaited(_loadRec(refresh: true));
+        unawaited(_restoreOrLoadRec());
       } else if (_tab == 1) {
-        unawaited(_loadConcern(refresh: true));
+        unawaited(_restoreOrLoadConcern());
       }
     });
   }
 
   @override
   void dispose() {
+    _settings?.removeListener(_onSettingsChange);
     _chrome?.removeListener(_onChromeChange);
     _recScroll.dispose();
     _concernScroll.dispose();
     super.dispose();
+  }
+
+  void _onSettingsChange() {
+    if (!mounted) return;
+    final nextDefault = _settings!.defaultFeedTab.clamp(0, 2);
+    if (nextDefault == _lastDefaultFeedTab) return;
+    _lastDefaultFeedTab = nextDefault;
+    _switchTab(nextDefault);
+  }
+
+  Future<void> _restoreOrLoadRec() async {
+    if (_recLoadedOnce) return;
+    final cached = await TabSnapshotCache.instance.readFeedRec(_accountKey);
+    if (!mounted) return;
+    if (cached != null) {
+      setState(() {
+        _recThreads = cached;
+        _recLoading = false;
+        _recError = null;
+        _recLoadedOnce = true;
+      });
+      return;
+    }
+    await _loadRec(refresh: true);
+  }
+
+  Future<void> _restoreOrLoadConcern() async {
+    if (_concernLoadedOnce) return;
+    final repo = context.read<TiebaRepo>();
+    if (!repo.isLoggedIn) {
+      setState(() {
+        _concernThreads = [];
+        _concernLoading = false;
+        _concernLoadedOnce = true;
+      });
+      return;
+    }
+    final cached = await TabSnapshotCache.instance.readFeedConcern(_accountKey);
+    if (!mounted) return;
+    if (cached != null) {
+      setState(() {
+        _concernThreads = cached.threads;
+        _concernPageTag = cached.pageTag;
+        _concernLastUnix = cached.requestUnix;
+        _concernHasMore = cached.hasMore;
+        _concernLoading = false;
+        _concernError = null;
+        _concernLoadedOnce = true;
+      });
+      return;
+    }
+    await _loadConcern(refresh: true);
   }
 
   void _onChromeChange() {
@@ -96,12 +155,12 @@ class _FeedPageState extends State<FeedPage> {
     final count = context.read<ChromeController>().feedRefreshCount;
     if (count == _lastFeedRefresh) return;
     _lastFeedRefresh = count;
-    final activeScroll = switch (_tab) {
-      0 => _recScroll,
-      1 => _concernScroll,
-      _ => null,
-    };
-    if (activeScroll != null && activeScroll.hasClients && activeScroll.offset > 0) {
+    if (_tab == 2) {
+      unawaited(_exploreKey.currentState?.scrollToTopAndReload());
+      return;
+    }
+    final activeScroll = _tab == 0 ? _recScroll : _concernScroll;
+    if (activeScroll.hasClients && activeScroll.offset > 0) {
       activeScroll.animateTo(
         0,
         duration: const Duration(milliseconds: 260),
@@ -151,9 +210,9 @@ class _FeedPageState extends State<FeedPage> {
     });
     context.read<ChromeController>().setHidden(false);
     if (next == 0 && !_recLoadedOnce) {
-      unawaited(_loadRec(refresh: true));
+      unawaited(_restoreOrLoadRec());
     } else if (next == 1 && !_concernLoadedOnce) {
-      unawaited(_loadConcern(refresh: true));
+      unawaited(_restoreOrLoadConcern());
     }
   }
 
@@ -198,6 +257,7 @@ class _FeedPageState extends State<FeedPage> {
         _recLoadingMore = false;
         _recLoadedOnce = true;
       });
+      unawaited(TabSnapshotCache.instance.saveFeedRec(_accountKey, _recThreads));
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -252,6 +312,17 @@ class _FeedPageState extends State<FeedPage> {
         _concernLoadingMore = false;
         _concernLoadedOnce = true;
       });
+      unawaited(
+        TabSnapshotCache.instance.saveFeedConcern(
+          _accountKey,
+          ConcernPageResult(
+            threads: _concernThreads,
+            pageTag: _concernPageTag,
+            hasMore: _concernHasMore,
+            requestUnix: _concernLastUnix,
+          ),
+        ),
+      );
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -375,6 +446,9 @@ class _FeedPageState extends State<FeedPage> {
     final top = pageTopInset(context);
     final bottom = pageBottomInset(context);
 
+    if (!_recLoadedOnce && !_recLoading && _recThreads.isEmpty) {
+      return const SizedBox.shrink();
+    }
     if (_recLoading && _recThreads.isEmpty) {
       return FeedSkeletonList(topInset: top);
     }
@@ -465,6 +539,9 @@ class _FeedPageState extends State<FeedPage> {
           child: const Text('登录贴吧'),
         ),
       );
+    }
+    if (!_concernLoadedOnce && !_concernLoading && _concernThreads.isEmpty) {
+      return const SizedBox.shrink();
     }
     if (_concernLoading && _concernThreads.isEmpty) {
       return FeedSkeletonList(topInset: top);

@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
 import '../../data/repo.dart';
+import '../../data/store.dart';
+import '../../data/tab_cache.dart';
 import '../routes.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -26,21 +28,61 @@ class ExploreView extends StatefulWidget {
 }
 
 class ExploreViewState extends State<ExploreView> {
+  final ScrollController _scroll = ScrollController();
   HotThreadPageResult? _data;
   String _selectedTabCode = 'all';
   String _selectedTabId = '1';
-  bool _loading = true;
+  bool _loading = false;
   String? _error;
+
+  String get _accountKey => context.read<FrostedStore>().activeUid ?? 'guest';
 
   /// 供外部（下拉刷新 / 双击底栏）重新拉取。
   Future<void> reload() => _load();
+
+  /// 供外部（双击底栏「动态」）回顶并重新拉取。
+  Future<void> scrollToTopAndReload() {
+    if (_scroll.hasClients && _scroll.offset > 0) {
+      unawaited(
+        _scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+    return _load();
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_load());
+      if (!mounted) return;
+      unawaited(_restoreOrLoad());
     });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _restoreOrLoad() async {
+    final cached = await TabSnapshotCache.instance.readFeedHot(_accountKey);
+    if (!mounted) return;
+    if (cached != null) {
+      setState(() {
+        _data = cached.data;
+        _selectedTabCode = cached.tabCode;
+        _selectedTabId = cached.tabId;
+        _loading = false;
+        _error = null;
+      });
+      return;
+    }
+    await _load();
   }
 
   Future<void> _load() async {
@@ -58,6 +100,14 @@ class ExploreViewState extends State<ExploreView> {
         _data = res;
         _loading = false;
       });
+      unawaited(
+        TabSnapshotCache.instance.saveFeedHot(
+          _accountKey,
+          data: res,
+          tabCode: _selectedTabCode,
+          tabId: _selectedTabId,
+        ),
+      );
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
@@ -92,13 +142,16 @@ class ExploreViewState extends State<ExploreView> {
         action: FilledButton(onPressed: _load, child: const Text('重试')),
       );
     }
-
-    final data = _data!;
+    final data = _data;
+    if (data == null) {
+      return const SizedBox.shrink();
+    }
     final topics = data.topics;
     final threads = data.threads;
     final tabs = data.tabs;
 
     return CustomScrollView(
+      controller: _scroll,
       slivers: [
         SliverPadding(
           padding: EdgeInsets.fromLTRB(14, top + 8, 14, 0),

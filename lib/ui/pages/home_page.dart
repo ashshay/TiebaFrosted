@@ -9,6 +9,7 @@ import '../../data/models.dart';
 import '../../data/repo.dart';
 import '../../data/settings.dart';
 import '../../data/store.dart';
+import '../../data/tab_cache.dart';
 import '../chrome.dart';
 import '../routes.dart';
 import '../theme.dart';
@@ -35,6 +36,7 @@ class _HomePageState extends State<HomePage> {
   int _lastHomeRefresh = 0;
 
   List<FollowedForum> _forums = [];
+  bool _forumsInitialized = false;
   bool _forumsLoading = false;
   String? _forumsError;
 
@@ -46,8 +48,47 @@ class _HomePageState extends State<HomePage> {
       _chrome = context.read<ChromeController>();
       _lastHomeRefresh = _chrome!.homeRefreshCount;
       _chrome!.addListener(_onChromeChange);
-      unawaited(_loadForums());
+      unawaited(_restoreOrLoadForums());
     });
+  }
+
+  String get _accountKey => context.read<FrostedStore>().activeUid ?? 'guest';
+
+  List<FollowedForum> _applyTopSort(List<FollowedForum> list) {
+    final tops = context.read<FrostedStore>().topForums;
+    return List<FollowedForum>.of(list)
+      ..sort((a, b) {
+        final at = tops.contains(a.forumName) ? 0 : 1;
+        final bt = tops.contains(b.forumName) ? 0 : 1;
+        return at.compareTo(bt);
+      });
+  }
+
+  Future<void> _restoreOrLoadForums() async {
+    final repo = context.read<TiebaRepo>();
+    if (!repo.isLoggedIn) {
+      if (mounted) {
+        setState(() {
+          _forums = [];
+          _forumsLoading = false;
+        });
+      }
+      return;
+    }
+    final cached = await TabSnapshotCache.instance.readFollowedForums(
+      _accountKey,
+    );
+    if (!mounted) return;
+    if (cached != null) {
+      setState(() {
+        _forums = _applyTopSort(cached);
+        _forumsInitialized = true;
+        _forumsLoading = false;
+        _forumsError = null;
+      });
+      return;
+    }
+    await _loadForums();
   }
 
   @override
@@ -90,12 +131,15 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
       setState(() {
         _forums = list;
+        _forumsInitialized = true;
         _forumsLoading = false;
       });
+      unawaited(TabSnapshotCache.instance.saveFollowedForums(_accountKey, list));
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _forumsError = cleanError(e);
+        _forumsInitialized = true;
         _forumsLoading = false;
       });
     }
@@ -201,6 +245,9 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     }
+    if (!_forumsInitialized && _forums.isEmpty) {
+      return const SizedBox.shrink();
+    }
     if (_forumsLoading && _forums.isEmpty) {
       return const FrostedLoading(label: '加载贴吧列表中...');
     }
@@ -251,11 +298,18 @@ class _HomePageState extends State<HomePage> {
         onLongPress: () async {
           await store.toggleTopForum(f.forumName);
           if (context.mounted) {
+            final resorted = _applyTopSort(_forums);
+            setState(() => _forums = resorted);
+            unawaited(
+              TabSnapshotCache.instance.saveFollowedForums(
+                _accountKey,
+                resorted,
+              ),
+            );
             showFrostedToast(
               context,
               pinned ? '已取消置顶 ${f.forumName}吧' : '已置顶 ${f.forumName}吧',
             );
-            unawaited(_loadForums());
           }
         },
       );

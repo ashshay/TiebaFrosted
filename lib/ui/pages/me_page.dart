@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../data/models.dart';
 import '../../data/repo.dart';
 import '../../data/store.dart';
+import '../../data/tab_cache.dart';
 import '../chrome.dart';
 import '../routes.dart';
 import '../theme.dart';
@@ -28,14 +29,30 @@ class _MePageState extends State<MePage> {
   TiebaUser? _profile;
   bool _loading = false;
 
+  String get _accountKey => context.read<FrostedStore>().activeUid ?? 'guest';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       if (context.read<FrostedStore>().isLoggedIn) {
-        unawaited(_loadProfile());
+        unawaited(_restoreOrLoadProfile());
       }
     });
+  }
+
+  Future<void> _restoreOrLoadProfile() async {
+    final cached = await TabSnapshotCache.instance.readMeProfile(_accountKey);
+    if (!mounted) return;
+    if (cached != null) {
+      setState(() {
+        _profile = cached;
+        _loading = false;
+      });
+      return;
+    }
+    await _loadProfile();
   }
 
   Future<void> _loadProfile() async {
@@ -49,6 +66,7 @@ class _MePageState extends State<MePage> {
         _profile = res.user;
         _loading = false;
       });
+      unawaited(TabSnapshotCache.instance.saveMeProfile(_accountKey, res.user));
     } on Object {
       if (mounted) setState(() => _loading = false);
     }
