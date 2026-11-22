@@ -256,7 +256,7 @@ Future<void> openImageViewer(
   BuildContext context, {
   required List<RichImageNode> images,
   int initialIndex = 0,
-}) => pushPage(
+}) => pushLightboxPage(
   context,
   ImageViewerPage(images: images, initialIndex: initialIndex),
 );

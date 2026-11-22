@@ -318,6 +318,7 @@ class TiebaForum {
     bool? isSign,
     int? userLevel,
     int? memberNum,
+    int? curScore,
     int? contSignNum,
     int? signRank,
   }) => TiebaForum(
@@ -334,7 +335,7 @@ class TiebaForum {
     memberNum: memberNum ?? this.memberNum,
     threadNum: threadNum,
     postNum: postNum,
-    curScore: curScore,
+    curScore: curScore ?? this.curScore,
     levelUpScore: levelUpScore,
     contSignNum: contSignNum ?? this.contSignNum,
     signRank: signRank ?? this.signRank,

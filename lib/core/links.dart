@@ -56,6 +56,36 @@ TiebaLink parseTiebaLink(String raw) {
     return TiebaWebLink(trimmed);
   }
 
+  // 贴吧网页「App内查看」按钮发的协议：`com.baidu.tieba://unidispatch/pb?tid=…`。
+  // 官方客户端与贴吧 Lite 都靠它接住网页跳转，动作在路径里。
+  if (scheme == 'com.baidu.tieba' && host == 'unidispatch') {
+    final action = path.startsWith('/') ? path.substring(1) : path;
+    final q = uri.queryParameters;
+    switch (action) {
+      case 'pb':
+        final tid = int.tryParse(q['tid'] ?? '');
+        if (tid != null && tid > 0) {
+          return TiebaThreadLink(
+            threadId: tid,
+            postId: int.tryParse(q['pid'] ?? q['hightlight_anchor_pid'] ?? ''),
+            subPostId: int.tryParse(q['spid'] ?? q['cid'] ?? ''),
+          );
+        }
+      case 'frs':
+        final kw = q['kw'] ?? q['forum_name'] ?? q['forumName'];
+        if (kw != null && kw.isNotEmpty) return TiebaForumLink(kw);
+      case 'user':
+      case 'personal':
+        final uid = int.tryParse(q['uid'] ?? '');
+        if (uid != null && uid > 0) return TiebaUserLink(uid: uid);
+        final portrait = q['portrait'] ?? q['id'];
+        if (portrait != null && portrait.isNotEmpty) {
+          return TiebaUserLink(portrait: portrait);
+        }
+    }
+    return TiebaWebLink(trimmed);
+  }
+
   // 贴吧的跳转中转页，真实地址在 url 参数里，偶尔会被拼成 http://https://。
   if (path == '/mo/q/checkurl') {
     final real = uri.queryParameters['url'];

@@ -247,93 +247,133 @@ class _SubPostsPageState extends State<SubPostsPage> {
                       child: const Text('重试'),
                     ),
                   )
-                : ListView(
+                : CustomScrollView(
                     controller: _scroll,
-                    padding: EdgeInsets.fromLTRB(
-                      14,
-                      pageTopInset(context) + 8,
-                      14,
-                      bottom + 96,
-                    ),
-                    children: [
-                      if (_parentPost != null) ...[
-                        PostTile(
-                          post: _parentPost!.copyWith(subPosts: const []),
-                          lzUserId: widget.lzUserId,
-                          isFirstFloor: true,
-                          onAuthorTap: _parentPost!.author.id > 0
-                              ? () => openUserProfile(
-                                  context,
-                                  uid: _parentPost!.author.id,
-                                  portrait: _parentPost!.author.portrait,
-                                  initialName: _parentPost!.author.displayName,
-                                )
-                              : null,
-                          onLinkTap: (url) => openTiebaUrl(context, url),
-                          onImageTap: (imgs, i) => openImageViewer(
-                            context,
-                            images: imgs,
-                            initialIndex: i,
-                          ),
+                    slivers: [
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(
+                          14,
+                          pageTopInset(context) + 8,
+                          14,
+                          0,
                         ),
-                        const SizedBox(height: 12),
-                      ],
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4, bottom: 8),
-                        child: Text(
-                          '共 ${_pageInfo.totalCount > 0 ? _pageInfo.totalCount : _subPosts.length} 条楼中楼',
-                          style: AppTextStyle.footnote
-                              .of(context)
-                              .copyWith(
-                                color: scheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
+                        sliver: SliverToBoxAdapter(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (_parentPost != null) ...[
+                                PostTile(
+                                  post: _parentPost!.copyWith(
+                                    subPosts: const [],
+                                  ),
+                                  lzUserId: widget.lzUserId,
+                                  isFirstFloor: true,
+                                  onAuthorTap: _parentPost!.author.id > 0
+                                      ? () => openUserProfile(
+                                          context,
+                                          uid: _parentPost!.author.id,
+                                          portrait: _parentPost!.author.portrait,
+                                          initialName:
+                                              _parentPost!.author.displayName,
+                                        )
+                                      : null,
+                                  onLinkTap: (url) =>
+                                      openTiebaUrl(context, url),
+                                  onImageTap: (imgs, i) => openImageViewer(
+                                    context,
+                                    images: imgs,
+                                    initialIndex: i,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 4,
+                                  bottom: 8,
+                                ),
+                                child: Text(
+                                  '共 ${_pageInfo.totalCount > 0 ? _pageInfo.totalCount : _subPosts.length} 条楼中楼',
+                                  style: AppTextStyle.footnote
+                                      .of(context)
+                                      .copyWith(
+                                        color: scheme.onSurfaceVariant,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
                               ),
+                            ],
+                          ),
                         ),
                       ),
                       if (_subPosts.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 36),
-                          child: FrostedEmpty(
-                            title: '暂无楼中楼回复',
-                            icon: FrostedGlyphs.comment,
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 36,
+                            ),
+                            child: FrostedEmpty(
+                              title: '暂无楼中楼回复',
+                              icon: FrostedGlyphs.comment,
+                            ),
                           ),
                         )
                       else
-                        for (var i = 0; i < _subPosts.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 8),
-                          SubPostTile(
-                            key: ValueKey('sub-${_subPosts[i].id}'),
-                            subPost: _subPosts[i],
-                            lzUserId: widget.lzUserId,
-                            onAuthorTap: _subPosts[i].author.id > 0
-                                ? () => openUserProfile(
-                                    context,
-                                    uid: _subPosts[i].author.id,
-                                    portrait: _subPosts[i].author.portrait,
-                                    initialName:
-                                        _subPosts[i].author.displayName,
-                                  )
-                                : null,
-                            onReplyTap: () =>
-                                setState(() => _replyTarget = _subPosts[i]),
-                            onAgreeTap: () => _toggleSubAgree(i),
-                            onLinkTap: (url) => openTiebaUrl(context, url),
-                            onAtTap: (uid, name) => openUserProfile(
-                              context,
-                              uid: uid,
-                              initialName: name,
-                            ),
-                            onImageTap: (imgs, idx) => openImageViewer(
-                              context,
-                              images: imgs,
-                              initialIndex: idx,
-                            ),
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(
+                            14,
+                            0,
+                            14,
+                            _loadingMore ? 0 : bottom + 96,
                           ),
-                        ],
+                          sliver: SliverList.separated(
+                            itemCount: _subPosts.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (context, i) {
+                              final sub = _subPosts[i];
+                              return SubPostTile(
+                                key: ValueKey('sub-${sub.id}'),
+                                subPost: sub,
+                                lzUserId: widget.lzUserId,
+                                onAuthorTap: sub.author.id > 0
+                                    ? () => openUserProfile(
+                                        context,
+                                        uid: sub.author.id,
+                                        portrait: sub.author.portrait,
+                                        initialName: sub.author.displayName,
+                                      )
+                                    : null,
+                                onReplyTap: () =>
+                                    setState(() => _replyTarget = sub),
+                                onAgreeTap: () => _toggleSubAgree(i),
+                                onLinkTap: (url) => openTiebaUrl(context, url),
+                                onAtTap: (uid, name) => openUserProfile(
+                                  context,
+                                  uid: uid,
+                                  initialName: name,
+                                ),
+                                onImageTap: (imgs, idx) => openImageViewer(
+                                  context,
+                                  images: imgs,
+                                  initialIndex: idx,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       if (_loadingMore)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: FrostedLoading(),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              14,
+                              16,
+                              14,
+                              bottom + 96,
+                            ),
+                            child: const FrostedLoading(),
+                          ),
                         ),
                     ],
                   ),

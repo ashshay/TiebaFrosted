@@ -203,36 +203,104 @@ void main() {
       final link = parseTiebaLink('tiebaclient://action/unknown');
       expect(link, isA<TiebaWebLink>());
     });
+
+    test('unidispatch /pb opens the thread the web page points at', () {
+      final link = parseTiebaLink(
+        'com.baidu.tieba://unidispatch/pb?obj_locate=p_w_app_uniCall'
+        '&obj_source=wise&obj_name=a0-bpb-c2742240650-d0-e0'
+        '&obj_param2=android_chrome&has_token=1&qd=scheme&fr=bpush'
+        '&tid=2742240650',
+      );
+      expect((link as TiebaThreadLink).threadId, 2742240650);
+    });
+
+    test('unidispatch /pb carries the anchor post id', () {
+      final link = parseTiebaLink(
+        'com.baidu.tieba://unidispatch/pb?tid=2742240650'
+        '&hightlight_anchor_pid=998877&is_anchor_to_comment=1',
+      );
+      final thread = link as TiebaThreadLink;
+      expect(thread.threadId, 2742240650);
+      expect(thread.postId, 998877);
+    });
+
+    test('unidispatch /frs opens the forum', () {
+      final link = parseTiebaLink(
+        'com.baidu.tieba://unidispatch/frs?kw=oricon&obj_source=wise',
+      );
+      expect((link as TiebaForumLink).forumName, 'oricon');
+    });
+
+    test('unidispatch without a usable target falls back to a web link', () {
+      expect(
+        parseTiebaLink('com.baidu.tieba://unidispatch/pb?tid=abc'),
+        isA<TiebaWebLink>(),
+      );
+      expect(
+        parseTiebaLink('com.baidu.tieba://unidispatch/unknown'),
+        isA<TiebaWebLink>(),
+      );
+    });
   });
 
   group('ProfileHeaderLayout geometry regression', () {
     test('elements never clip outside header extent across progress 0..1', () {
-      for (final topInset in const [0.0, 24.0, 44.0]) {
-        for (final textScale in const [0.85, 1.0, 1.3]) {
-          final nameLine = 22.0 * textScale * 1.3;
-          for (var step = 0; step <= 100; step++) {
-            final p = step / 100.0;
-            final layout = ProfileHeaderLayout.at(
-              progress: p,
-              topInset: topInset,
-              nameLine: nameLine,
-              textScale: textScale,
-              showBack: true,
-              onSurface: const Color(0xFFFFFFFF),
-            );
-            expect(layout.extent, greaterThanOrEqualTo(topInset + 56.0 - 1e-6));
-            expect(
-              layout.nameTop + layout.nameHeight,
-              lessThanOrEqualTo(layout.extent + 1e-6),
-              reason: 'name clips at p=$p top=$topInset scale=$textScale',
-            );
-            expect(
-              layout.avatarTop + layout.avatarSize,
-              lessThanOrEqualTo(layout.extent + 1e-6),
-              reason: 'avatar clips at p=$p top=$topInset scale=$textScale',
-            );
+      for (final coverHeight in const [
+        ProfileHeaderDelegate.defaultCoverHeight,
+        80.0,
+      ]) {
+        for (final topInset in const [0.0, 24.0, 44.0]) {
+          for (final textScale in const [0.85, 1.0, 1.3]) {
+            final nameLine = 22.0 * textScale * 1.3;
+            for (var step = 0; step <= 100; step++) {
+              final p = step / 100.0;
+              final layout = ProfileHeaderLayout.at(
+                progress: p,
+                topInset: topInset,
+                nameLine: nameLine,
+                textScale: textScale,
+                showBack: true,
+                onSurface: const Color(0xFFFFFFFF),
+                coverHeight: coverHeight,
+              );
+              expect(
+                layout.extent,
+                greaterThanOrEqualTo(topInset + 56.0 - 1e-6),
+              );
+              expect(
+                layout.nameTop + layout.nameHeight,
+                lessThanOrEqualTo(layout.extent + 1e-6),
+                reason: 'name clips at p=$p top=$topInset '
+                    'scale=$textScale cover=$coverHeight',
+              );
+              expect(
+                layout.avatarTop + layout.avatarSize,
+                lessThanOrEqualTo(layout.extent + 1e-6),
+                reason: 'avatar clips at p=$p top=$topInset '
+                    'scale=$textScale cover=$coverHeight',
+              );
+            }
           }
         }
+      }
+    });
+
+    test('a shorter cover keeps the avatar clear of the status bar', () {
+      for (final topInset in const [0.0, 24.0, 44.0]) {
+        final layout = ProfileHeaderLayout.at(
+          progress: 0,
+          topInset: topInset,
+          nameLine: 28.0,
+          textScale: 1.0,
+          showBack: true,
+          onSurface: const Color(0xFFFFFFFF),
+          coverHeight: 80,
+        );
+        expect(
+          layout.avatarTop,
+          greaterThanOrEqualTo(topInset + 56.0 - layout.avatarSize),
+          reason: 'avatar must not ride up over the collapsed bar',
+        );
       }
     });
   });

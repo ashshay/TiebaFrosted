@@ -510,169 +510,203 @@ class _ThreadPageState extends State<ThreadPage> {
       );
     }
 
-    return ListView(
+    final bottomPad = MediaQuery.paddingOf(context).bottom + 96;
+    return CustomScrollView(
       controller: _scroll,
-      padding: EdgeInsets.fromLTRB(
-        14,
-        top + 8,
-        14,
-        MediaQuery.paddingOf(context).bottom + 96,
-      ),
-      children: [
-        if (_firstFloor != null) ...[
-          PostTile(
-            key: ValueKey('post-1-${_firstFloor!.id}'),
-            post: _firstFloor!,
-            lzUserId: _lzUserId,
-            isFirstFloor: true,
-            replyCount: _thread.replyNum,
-            // 标题并进主楼正文首行，不再单独占一块。
-            leadingTitle: _thread.displayTitle,
-            onAuthorTap: _firstFloor!.author.id > 0
-                ? () => openUserProfile(
-                    context,
-                    uid: _firstFloor!.author.id,
-                    portrait: _firstFloor!.author.portrait,
-                    initialName: _firstFloor!.author.displayName,
-                  )
-                : null,
-            onAgreeTap: () => _togglePostAgree(_firstFloor!, isFirst: true),
-            onReplyTap: () => _openReplyEditor(),
-            onLinkTap: (url) => openTiebaUrl(context, url),
-            onAtTap: (uid, name) =>
-                openUserProfile(context, uid: uid, initialName: name),
-            onImageTap: (imgs, i) =>
-                openImageViewer(context, images: imgs, initialIndex: i),
-            onVideoTap: (v) => openVideoPlayer(context, videoUrl: v.videoUrl),
+      slivers: [
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(14, top + 8, 14, 0),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_firstFloor != null) ...[
+                  PostTile(
+                    key: ValueKey('post-1-${_firstFloor!.id}'),
+                    post: _firstFloor!,
+                    lzUserId: _lzUserId,
+                    isFirstFloor: true,
+                    replyCount: _thread.replyNum,
+                    // 标题并进主楼正文首行，不再单独占一块。
+                    leadingTitle: _thread.displayTitle,
+                    onAuthorTap: _firstFloor!.author.id > 0
+                        ? () => openUserProfile(
+                            context,
+                            uid: _firstFloor!.author.id,
+                            portrait: _firstFloor!.author.portrait,
+                            initialName: _firstFloor!.author.displayName,
+                          )
+                        : null,
+                    onAgreeTap: () =>
+                        _togglePostAgree(_firstFloor!, isFirst: true),
+                    onReplyTap: () => _openReplyEditor(),
+                    onLinkTap: (url) => openTiebaUrl(context, url),
+                    onAtTap: (uid, name) =>
+                        openUserProfile(context, uid: uid, initialName: name),
+                    onImageTap: (imgs, i) =>
+                        openImageViewer(context, images: imgs, initialIndex: i),
+                    onVideoTap: (v) =>
+                        openVideoPlayer(context, videoUrl: v.videoUrl),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (_thread.poll != null &&
+                    _thread.poll!.options.isNotEmpty) ...[
+                  _PollCard(
+                    poll: _thread.poll!,
+                    onVote: (optionIds) async {
+                      if (!await ensureLoggedIn(
+                        context,
+                        reason: '登录后即可参与投票',
+                      )) {
+                        return;
+                      }
+                      if (!context.mounted) return;
+                      final repo = context.read<TiebaRepo>();
+                      try {
+                        await repo.votePoll(
+                          forumId: _effectiveForumId,
+                          threadId: widget.threadId,
+                          optionIds: optionIds,
+                        );
+                        if (context.mounted) {
+                          showFrostedToast(context, '投票成功');
+                          unawaited(_load(page: 1, reset: true));
+                        }
+                      } on Object catch (e) {
+                        if (context.mounted) {
+                          showFrostedToast(
+                            context,
+                            cleanError(e),
+                            level: BannerLevel.error,
+                          );
+                        }
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (!settings.hideReply) ...[
+                  Row(
+                    key: _repliesKey,
+                    children: [
+                      ..._threadActions(scheme),
+                      const Spacer(),
+                      SizedBox(
+                        width: 176,
+                        child: SegmentedControl<int>(
+                          value: _sortType,
+                          onChanged: (v) {
+                            if (v == _sortType) return;
+                            setState(() {
+                              _sortType = v;
+                              _posts = [];
+                            });
+                            if (_scroll.hasClients) _scroll.jumpTo(0);
+                            // 倒序从最后一页进，直接就是最新回复；正序/热门从第一页。
+                            final last = _pageInfo.effectiveTotalPage;
+                            final target = v == 1 && last > 0 ? last : 1;
+                            unawaited(_load(page: target, reset: true));
+                          },
+                          segments: const [
+                            (0, '正序'),
+                            (1, '倒序'),
+                            (2, '热门'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-        ],
-        if (_thread.poll != null && _thread.poll!.options.isNotEmpty) ...[
-          _PollCard(
-            poll: _thread.poll!,
-            onVote: (optionIds) async {
-              if (!await ensureLoggedIn(context, reason: '登录后即可参与投票')) return;
-              if (!context.mounted) return;
-              final repo = context.read<TiebaRepo>();
-              try {
-                await repo.votePoll(
-                  forumId: _effectiveForumId,
-                  threadId: widget.threadId,
-                  optionIds: optionIds,
-                );
-                if (context.mounted) {
-                  showFrostedToast(context, '投票成功');
-                  unawaited(_load(page: 1, reset: true));
-                }
-              } on Object catch (e) {
-                if (context.mounted) {
-                  showFrostedToast(
-                    context,
-                    cleanError(e),
-                    level: BannerLevel.error,
-                  );
-                }
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-        ],
+        ),
         if (!settings.hideReply) ...[
-          Row(
-            key: _repliesKey,
-            children: [
-              ..._threadActions(scheme),
-              const Spacer(),
-              SizedBox(
-                width: 176,
-                child: SegmentedControl<int>(
-                  value: _sortType,
-                  onChanged: (v) {
-                    if (v == _sortType) return;
-                    setState(() {
-                      _sortType = v;
-                      _posts = [];
-                    });
-                    if (_scroll.hasClients) _scroll.jumpTo(0);
-                    // 倒序从最后一页进，直接就是最新回复；正序/热门从第一页。
-                    final last = _pageInfo.effectiveTotalPage;
-                    final target = v == 1 && last > 0 ? last : 1;
-                    unawaited(_load(page: target, reset: true));
-                  },
-                  segments: const [
-                    (0, '正序'),
-                    (1, '倒序'),
-                    (2, '热门'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
           if (_posts.isEmpty && !_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 36),
-              child: FrostedEmpty(
-                title: '还没有回复',
-                message: '来做第一个评论的吧友吧',
-                icon: FrostedGlyphs.comment,
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 14, vertical: 36),
+                child: FrostedEmpty(
+                  title: '还没有回复',
+                  message: '来做第一个评论的吧友吧',
+                  icon: FrostedGlyphs.comment,
+                ),
               ),
             )
           else
-            for (var i = 0; i < _posts.length; i++) ...[
-              if (i > 0) const SizedBox(height: 10),
-              PostTile(
-                key: ValueKey('post-${_posts[i].id}'),
-                post: _posts[i],
-                lzUserId: _lzUserId,
-                onAuthorTap: _posts[i].author.id > 0
-                    ? () => openUserProfile(
-                        context,
-                        uid: _posts[i].author.id,
-                        portrait: _posts[i].author.portrait,
-                        initialName: _posts[i].author.displayName,
-                      )
-                    : null,
-                onAgreeTap: () => _togglePostAgree(_posts[i], isFirst: false),
-                onReplyTap: () => _openReplyEditor(quotePost: _posts[i]),
-                onSubPostsTap: () => openSubPosts(
-                  context,
-                  threadId: widget.threadId,
-                  postId: _posts[i].id,
-                  forumId: _effectiveForumId,
-                  forumName: _effectiveForumName,
-                  lzUserId: _lzUserId,
-                  tbs: _tbs,
-                  initialPost: _posts[i],
-                ),
-                onMoreTap: () => _showPostActions(_posts[i]),
-                onLinkTap: (url) => openTiebaUrl(context, url),
-                onAtTap: (uid, name) =>
-                    openUserProfile(context, uid: uid, initialName: name),
-                onImageTap: (imgs, idx) =>
-                    openImageViewer(context, images: imgs, initialIndex: idx),
-                onVideoTap: (v) =>
-                    openVideoPlayer(context, videoUrl: v.videoUrl),
-              ),
-            ],
-          if (_loadingMore)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: FrostedLoading(),
-            )
-          else if (!_hasMoreInDirection && _posts.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Center(
-                child: Text(
-                  '— 到底了 —',
-                  style: AppTextStyle.caption1
-                      .of(context)
-                      .copyWith(color: scheme.onSurfaceVariant),
-                ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              sliver: SliverList.separated(
+                itemCount: _posts.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, i) {
+                  final post = _posts[i];
+                  return PostTile(
+                    key: ValueKey('post-${post.id}'),
+                    post: post,
+                    lzUserId: _lzUserId,
+                    onAuthorTap: post.author.id > 0
+                        ? () => openUserProfile(
+                            context,
+                            uid: post.author.id,
+                            portrait: post.author.portrait,
+                            initialName: post.author.displayName,
+                          )
+                        : null,
+                    onAgreeTap: () => _togglePostAgree(post, isFirst: false),
+                    onReplyTap: () => _openReplyEditor(quotePost: post),
+                    onSubPostsTap: () => openSubPosts(
+                      context,
+                      threadId: widget.threadId,
+                      postId: post.id,
+                      forumId: _effectiveForumId,
+                      forumName: _effectiveForumName,
+                      lzUserId: _lzUserId,
+                      tbs: _tbs,
+                      initialPost: post,
+                    ),
+                    onMoreTap: () => _showPostActions(post),
+                    onLinkTap: (url) => openTiebaUrl(context, url),
+                    onAtTap: (uid, name) =>
+                        openUserProfile(context, uid: uid, initialName: name),
+                    onImageTap: (imgs, idx) => openImageViewer(
+                      context,
+                      images: imgs,
+                      initialIndex: idx,
+                    ),
+                    onVideoTap: (v) =>
+                        openVideoPlayer(context, videoUrl: v.videoUrl),
+                  );
+                },
               ),
             ),
-        ],
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(14, 0, 14, bottomPad),
+              child: _loadingMore
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: FrostedLoading(),
+                    )
+                  : (!_hasMoreInDirection && _posts.isNotEmpty)
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      child: Center(
+                        child: Text(
+                          '— 到底了 —',
+                          style: AppTextStyle.caption1
+                              .of(context)
+                              .copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ] else
+          SliverToBoxAdapter(child: SizedBox(height: bottomPad)),
       ],
     );
   }

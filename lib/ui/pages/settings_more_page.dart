@@ -1,18 +1,64 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/image_cache.dart';
 import '../../data/local_db.dart';
 import '../../data/settings.dart';
 import '../widgets/common.dart';
 
-/// 更多设置页：图片缓存清理、历史清理与网络选项。
-class SettingsMorePage extends StatelessWidget {
+/// 更多设置页：图片缓存统计与清理、历史清理与网络选项。
+class SettingsMorePage extends StatefulWidget {
   const SettingsMorePage({super.key});
+
+  @override
+  State<SettingsMorePage> createState() => _SettingsMorePageState();
+}
+
+class _SettingsMorePageState extends State<SettingsMorePage> {
+  int? _diskCacheBytes;
+  bool _clearingCache = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refreshCacheSize());
+  }
+
+  Future<void> _refreshCacheSize() async {
+    final bytes = await TiebaImageCache.instance.diskUsageBytes();
+    if (!mounted) return;
+    setState(() => _diskCacheBytes = bytes);
+  }
+
+  Future<void> _clearImageCache() async {
+    if (_clearingCache) return;
+    setState(() => _clearingCache = true);
+    try {
+      await TiebaImageCache.instance.clear(includeFlutterImageCache: true);
+      if (!mounted) return;
+      setState(() {
+        _diskCacheBytes = 0;
+        _clearingCache = false;
+      });
+      showFrostedToast(context, '已清理图片缓存');
+    } on Object {
+      if (mounted) {
+        setState(() => _clearingCache = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<FrostedSettings>();
+    final cacheSubtitle = _clearingCache
+        ? '正在清理内存与磁盘图片缓存…'
+        : _diskCacheBytes == null
+            ? '释放内存与磁盘图片缓存（计算中…）'
+            : '已缓存 ${formatBytes(_diskCacheBytes!)}，点击释放内存与磁盘占用';
 
     return FrostedPage(
       title: '更多设置',
@@ -32,6 +78,7 @@ class SettingsMorePage extends StatelessWidget {
                   value: settings.useHttps,
                   onChanged: settings.setUseHttps,
                 ),
+                onPressed: () => settings.setUseHttps(!settings.useHttps),
               ),
               FrostedListRow(
                 title: const Text('使用内置浏览器'),
@@ -44,6 +91,7 @@ class SettingsMorePage extends StatelessWidget {
                   value: settings.useWebView,
                   onChanged: settings.setUseWebView,
                 ),
+                onPressed: () => settings.setUseWebView(!settings.useWebView),
               ),
             ],
           ),
@@ -51,13 +99,9 @@ class SettingsMorePage extends StatelessWidget {
           FrostedSettingsGroup(
             children: [
               FrostedListRow(
-                title: const Text('清理内存图片缓存'),
-                subtitle: const Text('释放已解码的图片缓存以降低内存占用'),
-                onPressed: () {
-                  PaintingBinding.instance.imageCache.clear();
-                  PaintingBinding.instance.imageCache.clearLiveImages();
-                  showFrostedToast(context, '已清理图片缓存');
-                },
+                title: const Text('清理图片缓存'),
+                subtitle: Text(cacheSubtitle),
+                onPressed: _clearingCache ? null : _clearImageCache,
               ),
               FrostedListRow(
                 title: const Text('清空全部浏览历史'),

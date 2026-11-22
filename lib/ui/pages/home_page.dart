@@ -41,7 +41,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(_onScrollNearBottom);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _chrome = context.read<ChromeController>();
@@ -71,12 +70,6 @@ class _HomePageState extends State<HomePage> {
       );
     }
     unawaited(_loadForums());
-  }
-
-  void _onScrollNearBottom() {
-    if (!_scroll.hasClients) return;
-    final max = _scroll.position.maxScrollExtent;
-    if (max <= 0 || _scroll.offset < max - 360) return;
   }
 
   Future<void> _loadForums() async {
@@ -110,13 +103,13 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = context.watch<ChromeController>();
+    final chrome = context.read<ChromeController>();
     final store = context.watch<FrostedStore>();
     final settings = context.watch<FrostedSettings>();
 
     return PrismScaffold(
       bar: FrostedAppBar(
-        hidden: chrome.hidden,
+        bindChrome: true,
         title: Text(
           '关注贴吧',
           style: AppTextStyle.title3
@@ -269,45 +262,55 @@ class _HomePageState extends State<HomePage> {
     }
 
     // 网格固定两列：自适应列宽在窄屏会挤成三列，吧名被截成「xperi…」这种。
-    if (!settings.forumListSingle) {
-      return CustomScrollView(
-        controller: _scroll,
-        slivers: [
-          if (header != null)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(14, top + 8, 14, 0),
-                child: header,
+    final listWidget = !settings.forumListSingle
+        ? CustomScrollView(
+            key: const ValueKey('home-forums-grid'),
+            controller: _scroll,
+            slivers: [
+              if (header != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(14, top + 8, 14, 0),
+                    child: header,
+                  ),
+                ),
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(14, 8, 14, bottom),
+                sliver: SliverGrid.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisExtent: 52,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  itemCount: _forums.length,
+                  itemBuilder: (_, idx) => buildForum(idx, compact: true),
+                ),
               ),
-            ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(14, 8, 14, bottom),
-            sliver: SliverGrid.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisExtent: 52,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
-              itemCount: _forums.length,
-              itemBuilder: (_, idx) => buildForum(idx, compact: true),
-            ),
-          ),
-        ],
-      );
-    }
-    return ListView.separated(
-      controller: _scroll,
-      padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
-      itemCount: _forums.length + (header != null ? 1 : 0),
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (_, idx) {
-        if (header != null) {
-          if (idx == 0) return header;
-          return buildForum(idx - 1, compact: false);
-        }
-        return buildForum(idx, compact: false);
-      },
+            ],
+          )
+        : ListView.separated(
+            key: const ValueKey('home-forums-list'),
+            controller: _scroll,
+            padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
+            itemCount: _forums.length + (header != null ? 1 : 0),
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (_, idx) {
+              if (header != null) {
+                if (idx == 0) return header;
+                return buildForum(idx - 1, compact: false);
+              }
+              return buildForum(idx, compact: false);
+            },
+          );
+
+    return AnimatedSwitcher(
+      duration: context.disableAnimations
+          ? Duration.zero
+          : const Duration(milliseconds: 200),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      child: listWidget,
     );
   }
 }

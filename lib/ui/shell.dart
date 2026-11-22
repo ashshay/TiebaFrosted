@@ -29,20 +29,38 @@ class FrostedShell extends StatefulWidget {
   State<FrostedShell> createState() => _FrostedShellState();
 }
 
-class _FrostedShellState extends State<FrostedShell> {
+class _FrostedShellState extends State<FrostedShell>
+    with SingleTickerProviderStateMixin {
   int _index = 0;
+  final List<bool> _mountedTabs = [false, false, false, false];
+  String _lastAccountKey = '';
+  late final AnimationController _tabFade = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 180),
+    value: 1.0,
+  );
+  late final CurvedAnimation _tabFadeCurve = CurvedAnimation(
+    parent: _tabFade,
+    curve: Curves.easeOutCubic,
+  );
   final GlobalKey _dockKey = GlobalKey();
   int? _lastTapIndex;
   DateTime? _lastTapAt;
   Timer? _longPressTimer;
   Offset? _pressStart;
+  StreamSubscription<String>? _deepLinkSub;
 
   @override
   void initState() {
     super.initState();
     _index = context.read<FrostedSettings>().startTab;
+    _mountedTabs[_index] = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_handleInitialDeepLink());
+    });
+    // 冷启动走 initialLink，热启动走这条流；两者都交给同一个分发器。
+    _deepLinkSub = NativeChannels.deepLinks().listen((link) {
+      if (mounted) unawaited(openTiebaUrl(context, link));
     });
   }
 
@@ -55,13 +73,26 @@ class _FrostedShellState extends State<FrostedShell> {
 
   @override
   void dispose() {
+    _deepLinkSub?.cancel();
     _longPressTimer?.cancel();
+    _tabFadeCurve.dispose();
+    _tabFade.dispose();
     super.dispose();
   }
 
   void _onDockSelected(int index) {
     context.read<ChromeController>().setHidden(false);
-    setState(() => _index = index);
+    if (index == _index) return;
+    setState(() {
+      _index = index;
+      _mountedTabs[index] = true;
+    });
+    if (!(MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
+      _tabFade
+        ..stop()
+        ..value = 0.0
+        ..forward();
+    }
   }
 
   void _handleDockPointerDown(PointerDownEvent event) {
@@ -111,7 +142,12 @@ class _FrostedShellState extends State<FrostedShell> {
       _lastTapAt = null;
       final chrome = context.read<ChromeController>();
       chrome.setHidden(false);
-      if (_index != index) setState(() => _index = index);
+      if (_index != index) {
+        setState(() {
+          _index = index;
+          _mountedTabs[index] = true;
+        });
+      }
       if (index == 0) {
         chrome.requestHomeRefresh();
       } else {
@@ -185,7 +221,6 @@ class _FrostedShellState extends State<FrostedShell> {
   Widget build(BuildContext context) {
     final store = context.watch<FrostedStore>();
     final settings = context.watch<FrostedSettings>();
-    final chrome = context.watch<ChromeController>();
     final disabled = context.disableAnimations;
 
     final dockAvatar = settings.profileTabAvatar && store.isLoggedIn
@@ -193,11 +228,25 @@ class _FrostedShellState extends State<FrostedShell> {
         : '';
 
     final accountKey = store.activeUid ?? 'guest';
+    if (_lastAccountKey != accountKey) {
+      _lastAccountKey = accountKey;
+      for (var i = 0; i < _mountedTabs.length; i++) {
+        _mountedTabs[i] = i == _index;
+      }
+    }
     final pages = <Widget>[
-      HomePage(key: ValueKey('home-$accountKey')),
-      FeedPage(key: ValueKey('feed-$accountKey')),
-      NotificationsPage(key: ValueKey('msg-$accountKey')),
-      MePage(key: ValueKey('me-$accountKey')),
+      _mountedTabs[0]
+          ? HomePage(key: ValueKey('home-$accountKey'))
+          : const SizedBox.shrink(),
+      _mountedTabs[1]
+          ? FeedPage(key: ValueKey('feed-$accountKey'))
+          : const SizedBox.shrink(),
+      _mountedTabs[2]
+          ? NotificationsPage(key: ValueKey('msg-$accountKey'))
+          : const SizedBox.shrink(),
+      _mountedTabs[3]
+          ? MePage(key: ValueKey('me-$accountKey'))
+          : const SizedBox.shrink(),
     ];
 
     return Surface(
@@ -207,59 +256,71 @@ class _FrostedShellState extends State<FrostedShell> {
           Positioned.fill(
             child: BottomInsetScope(
               inset: NavigationDock.insetOf(context),
-              child: IndexedStack(index: _index, children: pages),
+              child: AnimatedBuilder(
+                animation: _tabFadeCurve,
+                builder: (context, child) {
+                  final t = _tabFadeCurve.value;
+                  if (t >= 1.0) return child!;
+                  return Opacity(opacity: 0.86 + 0.14 * t, child: child);
+                },
+                child: IndexedStack(index: _index, children: pages),
+              ),
             ),
           ),
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
-            child: IgnorePointer(
-              ignoring: chrome.hidden,
-              child: AnimatedSlide(
-                offset: chrome.hidden ? const Offset(0, 1) : Offset.zero,
-                duration: disabled
-                    ? Duration.zero
-                    : const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                child: AnimatedOpacity(
-                  opacity: chrome.hidden ? 0 : 1,
+            child: Selector<ChromeController, bool>(
+              selector: (_, chrome) => chrome.hidden,
+              builder: (context, hidden, child) => IgnorePointer(
+                ignoring: hidden,
+                child: AnimatedSlide(
+                  offset: hidden ? const Offset(0, 1) : Offset.zero,
                   duration: disabled
                       ? Duration.zero
-                      : const Duration(milliseconds: 160),
-                  child: Listener(
-                    onPointerDown: _handleDockPointerDown,
-                    onPointerMove: _handleDockPointerMove,
-                    onPointerUp: _handleDockPointerUp,
-                    onPointerCancel: (_) => _cancelLongPress(),
-                    child: NavigationDock(
-                      key: _dockKey,
-                      destinations: [
-                        const NavigationDockDestination(
-                          glyph: FrostedGlyphs.home,
-                          label: '首页',
-                        ),
-                        const NavigationDockDestination(
-                          glyph: FrostedGlyphs.explore,
-                          label: '动态',
-                        ),
-                        const NavigationDockDestination(
-                          glyph: FrostedGlyphs.bell,
-                          label: '消息',
-                        ),
-                        NavigationDockDestination(
-                          glyph: FrostedGlyphs.person,
-                          label: '我的',
-                          icon: dockAvatar.isEmpty
-                              ? null
-                              : Avatar(url: dockAvatar, size: 28),
-                        ),
-                      ],
-                      selectedIndex: _index,
-                      onSelected: _onDockSelected,
-                      tintSelection: false,
-                    ),
+                      : const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedOpacity(
+                    opacity: hidden ? 0 : 1,
+                    duration: disabled
+                        ? Duration.zero
+                        : const Duration(milliseconds: 160),
+                    child: child,
                   ),
+                ),
+              ),
+              child: Listener(
+                onPointerDown: _handleDockPointerDown,
+                onPointerMove: _handleDockPointerMove,
+                onPointerUp: _handleDockPointerUp,
+                onPointerCancel: (_) => _cancelLongPress(),
+                child: NavigationDock(
+                  key: _dockKey,
+                  destinations: [
+                    const NavigationDockDestination(
+                      glyph: FrostedGlyphs.home,
+                      label: '首页',
+                    ),
+                    const NavigationDockDestination(
+                      glyph: FrostedGlyphs.explore,
+                      label: '动态',
+                    ),
+                    const NavigationDockDestination(
+                      glyph: FrostedGlyphs.bell,
+                      label: '消息',
+                    ),
+                    NavigationDockDestination(
+                      glyph: FrostedGlyphs.person,
+                      label: '我的',
+                      icon: dockAvatar.isEmpty
+                          ? null
+                          : Avatar(url: dockAvatar, size: 28),
+                    ),
+                  ],
+                  selectedIndex: _index,
+                  onSelected: _onDockSelected,
+                  tintSelection: false,
                 ),
               ),
             ),

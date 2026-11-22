@@ -33,6 +33,10 @@ class _PrefsDeviceKv implements DeviceKvStore {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 适度扩大 Flutter 解码图内存缓存上限，减少多图信息流快速上下滚动时的反复解码。
+  PaintingBinding.instance.imageCache
+    ..maximumSize = 1500
+    ..maximumSizeBytes = 160 * 1024 * 1024;
   final prefs = await SharedPreferences.getInstance();
   final settings = FrostedSettings(prefs);
   final device = await TiebaDevice.load(_PrefsDeviceKv(prefs));

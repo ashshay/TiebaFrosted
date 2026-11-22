@@ -35,16 +35,19 @@ class FeedPage extends StatefulWidget {
 class _FeedPageState extends State<FeedPage> {
   static const _tabs = ['推荐', '关注', '热榜'];
 
-  final ScrollController _scroll = ScrollController();
+  final ScrollController _recScroll = ScrollController();
+  final ScrollController _concernScroll = ScrollController();
   final GlobalKey<ExploreViewState> _exploreKey = GlobalKey<ExploreViewState>();
   ChromeController? _chrome;
   int _tab = 0; // 0 = 推荐, 1 = 关注, 2 = 热榜
+  bool _exploreMounted = false;
   int _lastFeedRefresh = 0;
 
   // 推荐流
   List<TiebaThread> _recThreads = [];
-  bool _recLoading = true;
+  bool _recLoading = false;
   bool _recLoadingMore = false;
+  bool _recLoadedOnce = false;
   String? _recError;
   int _recPage = 1;
 
@@ -61,20 +64,30 @@ class _FeedPageState extends State<FeedPage> {
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(_onScrollNearBottom);
+    _tab = context.read<FrostedSettings>().defaultFeedTab.clamp(0, 2);
+    if (_tab == 0) _recLoading = true;
+    if (_tab == 1) _concernLoading = true;
+    if (_tab == 2) _exploreMounted = true;
+    _recScroll.addListener(_onRecScrollNearBottom);
+    _concernScroll.addListener(_onConcernScrollNearBottom);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _chrome = context.read<ChromeController>();
       _lastFeedRefresh = _chrome!.feedRefreshCount;
       _chrome!.addListener(_onChromeChange);
-      unawaited(_loadRec(refresh: true));
+      if (_tab == 0) {
+        unawaited(_loadRec(refresh: true));
+      } else if (_tab == 1) {
+        unawaited(_loadConcern(refresh: true));
+      }
     });
   }
 
   @override
   void dispose() {
     _chrome?.removeListener(_onChromeChange);
-    _scroll.dispose();
+    _recScroll.dispose();
+    _concernScroll.dispose();
     super.dispose();
   }
 
@@ -83,8 +96,13 @@ class _FeedPageState extends State<FeedPage> {
     final count = context.read<ChromeController>().feedRefreshCount;
     if (count == _lastFeedRefresh) return;
     _lastFeedRefresh = count;
-    if (_scroll.hasClients && _scroll.offset > 0) {
-      _scroll.animateTo(
+    final activeScroll = switch (_tab) {
+      0 => _recScroll,
+      1 => _concernScroll,
+      _ => null,
+    };
+    if (activeScroll != null && activeScroll.hasClients && activeScroll.offset > 0) {
+      activeScroll.animateTo(
         0,
         duration: const Duration(milliseconds: 260),
         curve: Curves.easeOutCubic,
@@ -93,13 +111,20 @@ class _FeedPageState extends State<FeedPage> {
     unawaited(_refreshCurrentTab());
   }
 
-  void _onScrollNearBottom() {
-    if (!_scroll.hasClients) return;
-    final max = _scroll.position.maxScrollExtent;
-    if (max <= 0 || _scroll.offset < max - 360) return;
+  void _onRecScrollNearBottom() {
+    if (!_recScroll.hasClients) return;
+    final max = _recScroll.position.maxScrollExtent;
+    if (max <= 0 || _recScroll.offset < max - 360) return;
     if (_tab == 0 && !_recLoading && !_recLoadingMore) {
       unawaited(_loadRec(refresh: false));
-    } else if (_tab == 1 &&
+    }
+  }
+
+  void _onConcernScrollNearBottom() {
+    if (!_concernScroll.hasClients) return;
+    final max = _concernScroll.position.maxScrollExtent;
+    if (max <= 0 || _concernScroll.offset < max - 360) return;
+    if (_tab == 1 &&
         _concernHasMore &&
         !_concernLoading &&
         !_concernLoadingMore) {
@@ -120,10 +145,14 @@ class _FeedPageState extends State<FeedPage> {
 
   void _switchTab(int next) {
     if (next == _tab) return;
-    setState(() => _tab = next);
+    setState(() {
+      _tab = next;
+      if (next == 2) _exploreMounted = true;
+    });
     context.read<ChromeController>().setHidden(false);
-    if (_scroll.hasClients) _scroll.jumpTo(0);
-    if (next == 1 && !_concernLoadedOnce) {
+    if (next == 0 && !_recLoadedOnce) {
+      unawaited(_loadRec(refresh: true));
+    } else if (next == 1 && !_concernLoadedOnce) {
       unawaited(_loadConcern(refresh: true));
     }
   }
@@ -167,6 +196,7 @@ class _FeedPageState extends State<FeedPage> {
         }
         _recLoading = false;
         _recLoadingMore = false;
+        _recLoadedOnce = true;
       });
     } on Object catch (e) {
       if (!mounted) return;
@@ -174,6 +204,7 @@ class _FeedPageState extends State<FeedPage> {
         _recError = cleanError(e);
         _recLoading = false;
         _recLoadingMore = false;
+        _recLoadedOnce = true;
       });
     }
   }
@@ -265,13 +296,15 @@ class _FeedPageState extends State<FeedPage> {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = context.watch<ChromeController>();
+    final chrome = context.read<ChromeController>();
     final store = context.watch<FrostedStore>();
-    final settings = context.watch<FrostedSettings>();
+    final swipeEnabled = context.select<FrostedSettings, bool>(
+      (s) => s.swipeSwitchFeed,
+    );
 
     return PrismScaffold(
       bar: FrostedAppBar(
-        hidden: chrome.hidden,
+        bindChrome: true,
         title: SizedBox(
           width: 228,
           child: SegmentedControl<int>(
@@ -320,97 +353,107 @@ class _FeedPageState extends State<FeedPage> {
           child: SwipePager(
             index: _tab,
             count: _tabs.length,
-            enabled: settings.swipeSwitchFeed,
+            enabled: swipeEnabled,
             onIndexChanged: _swipeToTab,
-            child: _buildBody(context, store),
+            child: IndexedStack(
+              index: _tab,
+              children: [
+                _buildRecTab(context),
+                _buildConcernTab(context, store),
+                _exploreMounted
+                    ? ExploreView(key: _exploreKey)
+                    : const SizedBox.shrink(),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBody(BuildContext context, FrostedStore store) {
+  Widget _buildRecTab(BuildContext context) {
     final top = pageTopInset(context);
     final bottom = pageBottomInset(context);
 
-    if (_tab == 2) return ExploreView(key: _exploreKey);
-
-    if (_tab == 0) {
-      if (_recLoading && _recThreads.isEmpty) {
-        return FeedSkeletonList(topInset: top);
-      }
-      if (_recError != null && _recThreads.isEmpty) {
-        return FrostedEmpty(
-          title: '加载推荐失败',
-          message: _recError,
-          icon: FrostedGlyphs.home,
-          action: FilledButton(
-            onPressed: () => _loadRec(refresh: true),
-            child: const Text('重试'),
-          ),
-        );
-      }
-      if (_recThreads.isEmpty) {
-        return FrostedEmpty(
-          title: '暂无推荐内容',
-          message: '下拉刷新试试，或通过顶部搜索进入任意贴吧',
-          icon: FrostedGlyphs.home,
-          action: FilledButton(
-            onPressed: () => _loadRec(refresh: true),
-            child: const Text('刷新'),
-          ),
-        );
-      }
-      return ListView.separated(
-        controller: _scroll,
-        padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
-        itemCount: _recThreads.length + (_recLoadingMore ? 1 : 0),
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (context, idx) {
-          if (idx >= _recThreads.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: FrostedLoading(),
-            );
-          }
-          final t = _recThreads[idx];
-          return ThreadCard(
-            key: ValueKey('rec-${t.effectiveId}'),
-            thread: t,
-            onTap: () => openThread(
-              context,
-              threadId: t.effectiveId,
-              forumId: t.forumId,
-              forumName: t.forumName,
-              forumAvatar: t.forumAvatar,
-              initialTitle: t.displayTitle,
-            ),
-            onLongPress: () => showThreadContextMenu(context, t),
-            onForumTap: () => openForum(context, t.forumName),
-            onAuthorTap: t.author.id > 0
-                ? () => openUserProfile(
-                    context,
-                    uid: t.author.id,
-                    portrait: t.author.portrait,
-                    initialName: t.author.displayName,
-                  )
-                : null,
-            onAgreeTap: () => _toggleAgree(_recThreads, idx),
-            onCommentTap: () => openThread(
-              context,
-              threadId: t.effectiveId,
-              forumId: t.forumId,
-              forumName: t.forumName,
-              forumAvatar: t.forumAvatar,
-              initialTitle: t.displayTitle,
-              focusReplies: true,
-            ),
-            onImageTap: (imgs, i) =>
-                openImageViewer(context, images: imgs, initialIndex: i),
-          );
-        },
+    if (_recLoading && _recThreads.isEmpty) {
+      return FeedSkeletonList(topInset: top);
+    }
+    if (_recError != null && _recThreads.isEmpty) {
+      return FrostedEmpty(
+        title: '加载推荐失败',
+        message: _recError,
+        icon: FrostedGlyphs.home,
+        action: FilledButton(
+          onPressed: () => _loadRec(refresh: true),
+          child: const Text('重试'),
+        ),
       );
     }
+    if (_recThreads.isEmpty) {
+      return FrostedEmpty(
+        title: '暂无推荐内容',
+        message: '下拉刷新试试，或通过顶部搜索进入任意贴吧',
+        icon: FrostedGlyphs.home,
+        action: FilledButton(
+          onPressed: () => _loadRec(refresh: true),
+          child: const Text('刷新'),
+        ),
+      );
+    }
+    return ListView.separated(
+      controller: _recScroll,
+      padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
+      itemCount: _recThreads.length + (_recLoadingMore ? 1 : 0),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, idx) {
+        if (idx >= _recThreads.length) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: FrostedLoading(),
+          );
+        }
+        final t = _recThreads[idx];
+        return ThreadCard(
+          key: ValueKey('rec-${t.effectiveId}'),
+          thread: t,
+          onTap: () => openThread(
+            context,
+            threadId: t.effectiveId,
+            forumId: t.forumId,
+            forumName: t.forumName,
+            forumAvatar: t.forumAvatar,
+            initialTitle: t.displayTitle,
+          ),
+          onLongPress: () => showThreadContextMenu(context, t),
+          onForumTap: () => openForum(context, t.forumName),
+          onAuthorTap: t.author.id > 0
+              ? () => openUserProfile(
+                  context,
+                  uid: t.author.id,
+                  portrait: t.author.portrait,
+                  initialName: t.author.displayName,
+                )
+              : null,
+          onAgreeTap: () => _toggleAgree(_recThreads, idx),
+          onCommentTap: () => openThread(
+            context,
+            threadId: t.effectiveId,
+            forumId: t.forumId,
+            forumName: t.forumName,
+            forumAvatar: t.forumAvatar,
+            initialTitle: t.displayTitle,
+            focusReplies: true,
+          ),
+          onImageTap: (imgs, i) =>
+              openImageViewer(context, images: imgs, initialIndex: i),
+        );
+      },
+    );
+  }
+
+  Widget _buildConcernTab(BuildContext context, FrostedStore store) {
+    final top = pageTopInset(context);
+    final bottom = pageBottomInset(context);
 
     if (!store.isLoggedIn) {
       return FrostedEmpty(
@@ -449,7 +492,7 @@ class _FeedPageState extends State<FeedPage> {
       );
     }
     return ListView.separated(
-      controller: _scroll,
+      controller: _concernScroll,
       padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
       itemCount: _concernThreads.length + (_concernLoadingMore ? 1 : 0),
       separatorBuilder: (_, _) => const SizedBox(height: 10),

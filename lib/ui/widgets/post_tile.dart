@@ -362,14 +362,11 @@ class _SubPostPreviewLine extends StatelessWidget {
                 alignment: PlaceholderAlignment.middle,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 1),
-                  child: Image.network(
-                    url,
-                    width: emoSize,
-                    height: emoSize,
-                    fit: BoxFit.contain,
-                    headers: tiebaImageHeaders,
-                    gaplessPlayback: true,
-                    errorBuilder: (_, _, _) => Text('#($name)', style: style),
+                  child: TiebaEmoticonImage(
+                    url: url,
+                    size: emoSize,
+                    fallbackName: name,
+                    fallbackStyle: style,
                   ),
                 ),
               ),

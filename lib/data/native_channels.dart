@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 
 /// Android 原生 MethodChannel 桥接（Cookie、相册、系统浏览器、分享）。
@@ -6,6 +8,7 @@ abstract final class NativeChannels {
   static const _media = MethodChannel('frosted/media');
   static const _browser = MethodChannel('frosted/browser');
   static const _share = MethodChannel('frosted/share');
+  static const _deepLink = EventChannel('frosted/deeplink');
 
   static Future<Map<String, String>> readCookies() async {
     try {
@@ -101,6 +104,13 @@ abstract final class NativeChannels {
       return null;
     }
   }
+
+  /// 热启动时 onNewIntent 送来的链接流（app 已在前台又收到 VIEW intent）。
+  static Stream<String> deepLinks() => _deepLink
+      .receiveBroadcastStream()
+      .map((event) => event?.toString() ?? '')
+      .where((link) => link.isNotEmpty)
+      .handleError((Object _) {});
 
   static Future<bool> shareText(String text, {String? subject}) async {
     try {

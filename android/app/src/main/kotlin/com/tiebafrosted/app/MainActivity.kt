@@ -13,6 +13,7 @@ import android.webkit.CookieManager
 import android.webkit.WebStorage
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
@@ -21,11 +22,16 @@ class MainActivity : FlutterActivity() {
     private val mediaChannel = "frosted/media"
     private val browserChannel = "frosted/browser"
     private val shareChannel = "frosted/share"
+    private val deepLinkChannel = "frosted/deeplink"
     private val storageRequestCode = 0x4d46
 
     private var pendingSave: (() -> Unit)? = null
     private var pendingSaveFailure: ((String) -> Unit)? = null
     private var initialDeepLink: String? = null
+
+    /// 热启动时把 onNewIntent 收到的链接推给 Dart；Dart 还没订阅就先攒着。
+    private var deepLinkSink: EventChannel.EventSink? = null
+    private val queuedDeepLinks = ArrayDeque<String>()
 
     private val cookieUrls = linkedMapOf(
         "https://tieba.baidu.com" to ".baidu.com",
@@ -37,7 +43,17 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent.dataString?.let { initialDeepLink = it }
+        intent.dataString?.let { deliverDeepLink(it) }
+    }
+
+    /// 热启动的链接直接推给 Dart；没有订阅者时先排队，等 Dart 连上再补发。
+    private fun deliverDeepLink(link: String) {
+        val sink = deepLinkSink
+        if (sink != null) {
+            sink.success(link)
+        } else {
+            queuedDeepLinks.addLast(link)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -134,6 +150,20 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, deepLinkChannel)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    deepLinkSink = events
+                    while (queuedDeepLinks.isNotEmpty()) {
+                        events?.success(queuedDeepLinks.removeFirst())
+                    }
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    deepLinkSink = null
+                }
+            })
     }
 
     private fun readCookies(): Map<String, String> {

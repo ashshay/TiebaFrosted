@@ -68,9 +68,12 @@ class _TiebaFrostedAppState extends State<TiebaFrostedApp> {
     try {
       final seeds = await DynamicColorPlugin.getSystemSeeds();
       if (!mounted || seeds == null) return;
+      systemMonetLightSeed = seeds.light;
+      systemMonetDarkSeed = seeds.dark;
       setState(() {
         _monetLight = seeds.light;
         _monetDark = seeds.dark;
+        _themes.clear();
       });
     } on Object {
       // 非 Android 12+ 设备回退默认贴吧蓝
@@ -87,7 +90,8 @@ class _TiebaFrostedAppState extends State<TiebaFrostedApp> {
   void _syncHueTimer() {
     final cycling = widget.settings.accentColor == accentHueCycle;
     if (cycling && _hueTimer == null) {
-      _hueTimer = Timer.periodic(const Duration(milliseconds: 140), (_) {
+      // 间隔需明显大于 ThemeCrossFade 的 200ms 过渡，避免连续截屏互抢导致闪烁卡顿。
+      _hueTimer = Timer.periodic(const Duration(milliseconds: 600), (_) {
         if (mounted) setState(() {});
       });
     } else if (!cycling && _hueTimer != null) {
@@ -104,15 +108,23 @@ class _TiebaFrostedAppState extends State<TiebaFrostedApp> {
         ? monet.toARGB32()
         : accentArgbAt(configured, dark: dark);
     final style = widget.settings.colorStyle;
-    final key =
-        '${brightness.name}-$argb-${style.index}-${widget.settings.fontScale}';
+    if (configured == accentHueCycle) {
+      return frostedTheme(
+        brightness: brightness,
+        accentArgb: argb,
+        style: style,
+      );
+    }
+    // 字体缩放由 PrismApp.textScale 独立驱动，不放进 ThemeData 缓存键，
+    // 避免拖动字号滑块时触发全屏 ThemeCrossFade 截屏重绘。
+    final key = '${brightness.name}-$argb-${style.index}';
+    if (_themes.length > 16) _themes.clear();
     return _themes.putIfAbsent(
       key,
       () => frostedTheme(
         brightness: brightness,
         accentArgb: argb,
         style: style,
-        exactAccent: configured == 0 ? monet : null,
       ),
     );
   }

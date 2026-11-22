@@ -50,6 +50,9 @@ class FrostedSettings extends ChangeNotifier {
   /// 启动时停在底栏哪一格：0 首页 / 1 动态 / 2 消息 / 3 我的。
   int startTab = 0;
 
+  /// 进入「动态」时默认停在哪个分栏：0 推荐 / 1 关注 / 2 热榜。
+  int defaultFeedTab = 0;
+
   // 屏蔽总开关
   bool enableBlock = true;
   bool blockVideoThread = false;
@@ -99,6 +102,7 @@ class FrostedSettings extends ChangeNotifier {
     homeShowHistoryForum = _prefs.getBool('home_show_history_forum') ?? true;
     useWebView = _prefs.getBool('use_webview') ?? true;
     startTab = (_prefs.getInt('start_tab') ?? 0).clamp(0, 3);
+    defaultFeedTab = (_prefs.getInt('default_feed_tab') ?? 0).clamp(0, 2);
 
     enableBlock = _prefs.getBool('enable_block') ?? true;
     blockVideoThread = _prefs.getBool('block_video_thread') ?? false;
@@ -114,161 +118,197 @@ class FrostedSettings extends ChangeNotifier {
   }
 
   Future<void> setDarkMode(int value) async {
+    if (darkMode == value) return;
     darkMode = value;
-    await _prefs.setInt('dark_mode', value);
     notifyListeners();
+    await _prefs.setInt('dark_mode', value);
   }
 
   Future<void> setAccentColor(int value) async {
+    if (accentColor == value) return;
     accentColor = value;
-    await _prefs.setInt('accent_color', value);
     notifyListeners();
+    await _prefs.setInt('accent_color', value);
   }
 
   Future<void> setColorStyle(ColorStyle value) async {
+    if (colorStyle == value) return;
     colorStyle = value;
-    await _prefs.setInt('color_style', value.index);
     notifyListeners();
+    await _prefs.setInt('color_style', value.index);
   }
 
   Future<void> setLiquidGlass(LiquidGlassLevel value) async {
+    if (liquidGlass == value) return;
     liquidGlass = value;
-    await _prefs.setInt('liquid_glass', value.index);
     notifyListeners();
+    await _prefs.setInt('liquid_glass', value.index);
   }
 
   Future<void> setBlurEffects(bool value) async {
+    if (blurEffects == value) return;
     blurEffects = value;
-    await _prefs.setBool('blur_effects', value);
     notifyListeners();
+    await _prefs.setBool('blur_effects', value);
   }
 
   Future<void> setFontScale(double value) async {
-    fontScale = value.clamp(0.85, 1.3);
-    await _prefs.setDouble('font_scale', fontScale);
+    final next = (value.clamp(0.85, 1.3) * 100).round() / 100.0;
+    if (fontScale == next) return;
+    fontScale = next;
     notifyListeners();
+    await _prefs.setDouble('font_scale', fontScale);
   }
 
   Future<void> setLoadOriginImage(bool value) async {
+    if (loadOriginImage == value) return;
     loadOriginImage = value;
-    await _prefs.setBool('load_origin_image', value);
     notifyListeners();
+    await _prefs.setBool('load_origin_image', value);
   }
 
   Future<void> setShowBothUsernameAndNickname(bool value) async {
+    if (showBothUsernameAndNickname == value) return;
     showBothUsernameAndNickname = value;
-    await _prefs.setBool('show_both_username_and_nickname', value);
     notifyListeners();
+    await _prefs.setBool('show_both_username_and_nickname', value);
   }
 
   Future<void> setShowThreadAbstract(bool value) async {
+    if (showThreadAbstract == value) return;
     showThreadAbstract = value;
-    await _prefs.setBool('show_thread_abstract', value);
     notifyListeners();
+    await _prefs.setBool('show_thread_abstract', value);
   }
 
   Future<void> setShowSingleLineTitle(bool value) async {
+    if (showSingleLineTitle == value) return;
     showSingleLineTitle = value;
-    await _prefs.setBool('show_single_line_title', value);
     notifyListeners();
+    await _prefs.setBool('show_single_line_title', value);
   }
 
   Future<void> setConfirmBeforeLike(bool value) async {
+    if (confirmBeforeLike == value) return;
     confirmBeforeLike = value;
-    await _prefs.setBool('confirm_before_like', value);
     notifyListeners();
+    await _prefs.setBool('confirm_before_like', value);
   }
 
   Future<void> setQuickSwitchAccount(bool value) async {
+    if (quickSwitchAccount == value) return;
     quickSwitchAccount = value;
-    await _prefs.setBool('quick_switch_account', value);
     notifyListeners();
+    await _prefs.setBool('quick_switch_account', value);
   }
 
   Future<void> setProfileTabAvatar(bool value) async {
+    if (profileTabAvatar == value) return;
     profileTabAvatar = value;
-    await _prefs.setBool('profile_tab_avatar', value);
     notifyListeners();
+    await _prefs.setBool('profile_tab_avatar', value);
   }
 
   Future<void> setHideReply(bool value) async {
+    if (hideReply == value) return;
     hideReply = value;
-    await _prefs.setBool('hide_reply', value);
     notifyListeners();
+    await _prefs.setBool('hide_reply', value);
   }
 
   Future<void> setHideMedia(bool value) async {
+    if (hideMedia == value) return;
     hideMedia = value;
-    await _prefs.setBool('hide_media', value);
     notifyListeners();
+    await _prefs.setBool('hide_media', value);
   }
 
   Future<void> setForumListSingle(bool value) async {
+    if (forumListSingle == value) return;
     forumListSingle = value;
-    await _prefs.setBool('forum_list_single', value);
     notifyListeners();
+    await _prefs.setBool('forum_list_single', value);
   }
 
   Future<void> setSwipeSwitchFeed(bool value) async {
+    if (swipeSwitchFeed == value) return;
     swipeSwitchFeed = value;
-    await _prefs.setBool('swipe_switch_feed', value);
     notifyListeners();
+    await _prefs.setBool('swipe_switch_feed', value);
   }
 
   Future<void> setHomeShowHistoryForum(bool value) async {
+    if (homeShowHistoryForum == value) return;
     homeShowHistoryForum = value;
-    await _prefs.setBool('home_show_history_forum', value);
     notifyListeners();
+    await _prefs.setBool('home_show_history_forum', value);
   }
 
   Future<void> setUseWebView(bool value) async {
+    if (useWebView == value) return;
     useWebView = value;
-    await _prefs.setBool('use_webview', value);
     notifyListeners();
+    await _prefs.setBool('use_webview', value);
   }
 
   Future<void> setStartTab(int value) async {
-    startTab = value.clamp(0, 3);
-    await _prefs.setInt('start_tab', startTab);
+    final next = value.clamp(0, 3);
+    if (startTab == next) return;
+    startTab = next;
     notifyListeners();
+    await _prefs.setInt('start_tab', startTab);
+  }
+
+  Future<void> setDefaultFeedTab(int value) async {
+    final next = value.clamp(0, 2);
+    if (defaultFeedTab == next) return;
+    defaultFeedTab = next;
+    notifyListeners();
+    await _prefs.setInt('default_feed_tab', defaultFeedTab);
   }
 
   Future<void> setEnableBlock(bool value) async {
+    if (enableBlock == value) return;
     enableBlock = value;
-    await _prefs.setBool('enable_block', value);
     notifyListeners();
+    await _prefs.setBool('enable_block', value);
   }
 
   Future<void> setBlockVideoThread(bool value) async {
+    if (blockVideoThread == value) return;
     blockVideoThread = value;
-    await _prefs.setBool('block_video_thread', value);
     notifyListeners();
+    await _prefs.setBool('block_video_thread', value);
   }
 
   Future<void> setAutoSign(bool value) async {
+    if (autoSign == value) return;
     autoSign = value;
-    await _prefs.setBool('auto_sign', value);
     notifyListeners();
+    await _prefs.setBool('auto_sign', value);
   }
 
   Future<void> setAutoSignTime(int hour, int minute) async {
     autoSignHour = hour.clamp(0, 23);
     autoSignMinute = minute.clamp(0, 59);
+    notifyListeners();
     await _prefs.setInt('auto_sign_hour', autoSignHour);
     await _prefs.setInt('auto_sign_minute', autoSignMinute);
-    notifyListeners();
   }
 
   Future<void> setOkSignUseOfficial(bool value) async {
+    if (okSignUseOfficial == value) return;
     okSignUseOfficial = value;
-    await _prefs.setBool('oksign_use_official', value);
     notifyListeners();
+    await _prefs.setBool('oksign_use_official', value);
   }
 
   Future<void> setDefaultSortType(int value) async {
-    defaultSortType = value.clamp(0, 1);
-    await _prefs.setInt('default_sort_type', defaultSortType);
+    final next = value.clamp(0, 1);
+    if (defaultSortType == next) return;
+    defaultSortType = next;
     notifyListeners();
+    await _prefs.setInt('default_sort_type', defaultSortType);
   }
 
   Future<void> setFeedAnchor(String value) async {
@@ -277,8 +317,9 @@ class FrostedSettings extends ChangeNotifier {
   }
 
   Future<void> setUseHttps(bool value) async {
+    if (useHttps == value) return;
     useHttps = value;
-    await _prefs.setBool('use_https', value);
     notifyListeners();
+    await _prefs.setBool('use_https', value);
   }
 }

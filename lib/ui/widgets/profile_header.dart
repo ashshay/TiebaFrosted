@@ -52,13 +52,18 @@ class ProfileHeaderLayout {
     required double textScale,
     required bool showBack,
     required Color onSurface,
+    double coverHeight = ProfileHeaderDelegate.defaultCoverHeight,
   }) {
     final p = progress.clamp(0.0, 1.0);
-    final maxExtent = ProfileHeaderDelegate.expandedExtent(topInset, nameLine);
+    final maxExtent = ProfileHeaderDelegate.expandedExtent(
+      topInset,
+      nameLine,
+      coverHeight,
+    );
     final minExtent = ProfileHeaderDelegate.collapsedExtent(topInset);
     final extent = maxExtent - (maxExtent - minExtent) * p;
 
-    const cover = ProfileHeaderDelegate.coverHeight;
+    final cover = coverHeight;
     const bar = ProfileHeaderDelegate.barHeight;
     const outer = ProfileHeaderDelegate.avatarOuter;
     const small = ProfileHeaderDelegate.avatarSmall;
@@ -131,6 +136,8 @@ class ProfileHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.title,
     required this.avatarUrl,
     this.coverUrl = '',
+    this.coverHeight = defaultCoverHeight,
+    this.headerAccessory,
     this.subtitle,
     this.showBack = true,
     required this.onBack,
@@ -143,13 +150,20 @@ class ProfileHeaderDelegate extends SliverPersistentHeaderDelegate {
   final String title;
   final String avatarUrl;
   final String coverUrl;
+
+  /// 顶图区高度。没有头图的页面（比如吧主页）把它调小，省掉上方那片留白。
+  final double coverHeight;
+
+  /// 头像右侧那块的附加内容（吧主页用来挂等级与经验）。
+  /// 随折叠一起淡出，展开态才占位，避免和折叠栏里的标题抢位置。
+  final Widget? headerAccessory;
   final String? subtitle;
   final bool showBack;
   final VoidCallback onBack;
   final List<ProfileHeaderAction> actions;
   final bool avatarRoundedSquare;
 
-  static const coverHeight = 152.0;
+  static const defaultCoverHeight = 152.0;
   static const barHeight = 56.0;
   static const avatarOuter = 68.0;
   static const avatarSmall = 32.0;
@@ -162,7 +176,11 @@ class ProfileHeaderDelegate extends SliverPersistentHeaderDelegate {
   static double nameLineOf(BuildContext context) =>
       MediaQuery.textScalerOf(context).scale(28.0);
 
-  static double expandedExtent(double topInset, double nameLine) =>
+  static double expandedExtent(
+    double topInset,
+    double nameLine, [
+    double coverHeight = defaultCoverHeight,
+  ]) =>
       topInset + coverHeight + avatarOuter - overlap + _nameGap + nameLine + 10;
 
   static double collapsedExtent(double topInset) => topInset + barHeight;
@@ -171,7 +189,7 @@ class ProfileHeaderDelegate extends SliverPersistentHeaderDelegate {
   double get minExtent => collapsedExtent(topInset);
 
   @override
-  double get maxExtent => expandedExtent(topInset, nameLine);
+  double get maxExtent => expandedExtent(topInset, nameLine, coverHeight);
 
   double get _range => maxExtent - minExtent;
 
@@ -189,6 +207,8 @@ class ProfileHeaderDelegate extends SliverPersistentHeaderDelegate {
       title: title,
       avatarUrl: avatarUrl,
       coverUrl: coverUrl,
+      coverHeight: coverHeight,
+      headerAccessory: headerAccessory,
       showBack: showBack,
       onBack: onBack,
       actions: actions,
@@ -203,6 +223,8 @@ class ProfileHeaderDelegate extends SliverPersistentHeaderDelegate {
       old.title != title ||
       old.avatarUrl != avatarUrl ||
       old.coverUrl != coverUrl ||
+      old.coverHeight != coverHeight ||
+      old.headerAccessory != headerAccessory ||
       old.showBack != showBack ||
       old.actions != actions ||
       old.avatarRoundedSquare != avatarRoundedSquare;
@@ -216,6 +238,8 @@ class _ProfileHeaderView extends StatelessWidget {
     required this.title,
     required this.avatarUrl,
     required this.coverUrl,
+    required this.coverHeight,
+    required this.headerAccessory,
     required this.showBack,
     required this.onBack,
     required this.actions,
@@ -228,6 +252,8 @@ class _ProfileHeaderView extends StatelessWidget {
   final String title;
   final String avatarUrl;
   final String coverUrl;
+  final double coverHeight;
+  final Widget? headerAccessory;
   final bool showBack;
   final VoidCallback onBack;
   final List<ProfileHeaderAction> actions;
@@ -238,7 +264,7 @@ class _ProfileHeaderView extends StatelessWidget {
     final scheme = context.colorScheme;
     final surface = SurfaceLevel.page.colorOf(scheme);
     const bar = ProfileHeaderDelegate.barHeight;
-    const cover = ProfileHeaderDelegate.coverHeight;
+    final cover = coverHeight;
     const outer = ProfileHeaderDelegate.avatarOuter;
     const action = ProfileHeaderDelegate.actionWidth;
 
@@ -249,9 +275,11 @@ class _ProfileHeaderView extends StatelessWidget {
       textScale: MediaQuery.textScalerOf(context).scale(1),
       showBack: showBack,
       onSurface: scheme.onSurface,
+      coverHeight: cover,
     );
-    final coverVisible =
-        m.coverBottom <= 0 ? 0.0 : (m.coverBottom / (topInset + cover));
+    final coverVisible = cover <= 0 || m.coverBottom <= 0
+        ? 0.0
+        : (m.coverBottom / (topInset + cover)).clamp(0.0, 1.0);
     final buttonTop = topInset + (bar - action) / 2;
     final actionsWidth = action * actions.length + 8;
     final barBottom = topInset + bar;
@@ -395,6 +423,23 @@ class _ProfileHeaderView extends StatelessWidget {
               ),
             ),
           ),
+          if (headerAccessory != null)
+            Positioned(
+              left: m.avatarLeft + m.avatarSize + 12,
+              right: 14,
+              top: m.avatarTop,
+              height: m.avatarSize,
+              // 折叠后这里要让给折叠栏里的标题，淡出得比头像收缩更早。
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: (1 - progress * 2.6).clamp(0.0, 1.0),
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: headerAccessory,
+                  ),
+                ),
+              ),
+            ),
           if (showBack)
             Positioned(
               left: 4,

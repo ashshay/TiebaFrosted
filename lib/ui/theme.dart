@@ -6,6 +6,13 @@ import '../data/settings.dart';
 /// 贴吧蓝作为默认强调色种子（支持 Android 12+ Monet 覆盖）。
 const defaultAccent = Color(0xFF4E9EF5);
 
+/// 应用启动时采到的系统 Monet 壁纸种子色，供外观设置页展示真实预览色点。
+Color? systemMonetLightSeed;
+Color? systemMonetDarkSeed;
+
+Color? systemMonetSeed({required bool dark}) =>
+    dark ? systemMonetDarkSeed : systemMonetLightSeed;
+
 const _hueCyclePeriodMs = 36000;
 
 int accentArgbAt(int configured, {required bool dark, DateTime? now}) {
@@ -15,7 +22,9 @@ int accentArgbAt(int configured, {required bool dark, DateTime? now}) {
     final hue = millis / _hueCyclePeriodMs * 360;
     return _hsvToArgb(hue, dark ? 0.78 : 0.82, dark ? 0.94 : 0.88);
   }
-  if (configured == 0) return defaultAccent.toARGB32();
+  if (configured == 0) {
+    return (systemMonetSeed(dark: dark) ?? defaultAccent).toARGB32();
+  }
   return configured | 0xFF000000;
 }
 

@@ -57,7 +57,7 @@ class _MePageState extends State<MePage> {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<FrostedStore>();
-    final chrome = context.watch<ChromeController>();
+    final chrome = context.read<ChromeController>();
 
     if (!store.isLoggedIn) {
       return _GuestMeView(chrome: chrome);
@@ -344,7 +344,7 @@ class _GuestMeView extends StatelessWidget {
     final scheme = context.colorScheme;
     return PrismScaffold(
       bar: FrostedAppBar(
-        hidden: chrome.hidden,
+        bindChrome: true,
         title: Text(
           '我的',
           style: AppTextStyle.title2

@@ -169,6 +169,7 @@ class _ForumPageState extends State<ForumPage> {
       setState(() {
         _forum = _forum.copyWith(
           isSign: true,
+          curScore: _forum.curScore + (res.signBonusPoint > 0 ? res.signBonusPoint : 0),
           contSignNum: res.contSignNum > 0
               ? res.contSignNum
               : _forum.contSignNum + 1,
@@ -190,6 +191,7 @@ class _ForumPageState extends State<ForumPage> {
     if (!mounted || _forum.id <= 0) return;
     final nextLike = !_forum.isLike;
     final prev = _forum;
+    HapticFeedback.selectionClick();
     setState(() {
       _forum = _forum.copyWith(
         isLike: nextLike,
@@ -297,6 +299,11 @@ class _ForumPageState extends State<ForumPage> {
                 nameLine: ProfileHeaderDelegate.nameLineOf(context),
                 title: '${_forum.name.isNotEmpty ? _forum.name : widget.forumName}吧',
                 avatarUrl: _forum.avatar,
+                // 吧没有头图，顶图区留白收窄，给下面的等级/经验腾地方。
+                coverHeight: 80,
+                headerAccessory: _forum.userLevel > 0
+                    ? _ForumLevelBar(forum: _forum)
+                    : null,
                 avatarRoundedSquare: true,
                 showBack: true,
                 onBack: () => Navigator.of(context).maybePop(),
@@ -359,7 +366,6 @@ class _ForumPageState extends State<ForumPage> {
                                 '关注 ${formatCount(_forum.memberNum)}',
                               if (_forum.postNum > 0)
                                 '帖子 ${formatCount(_forum.postNum)}',
-                              if (_forum.userLevel > 0) 'Lv.${_forum.userLevel}',
                             ]),
                             style: AppTextStyle.caption1
                                 .of(context)
@@ -448,52 +454,73 @@ class _ForumPageState extends State<ForumPage> {
                         ),
                       ],
                     ),
-                    if (_sortType == -1 && _forum.goodClassifies.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (final c in _forum.goodClassifies)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: FrostedTapSurface(
-                                  onPressed: () {
-                                    setState(() {
-                                      _goodClassifyId = c.id;
-                                      _threads = [];
-                                    });
-                                    unawaited(_load(refresh: true));
-                                  },
-                                  pill: true,
-                                  fill: (_goodClassifyId ?? 0) == c.id
-                                      ? scheme.primary
-                                      : context.surfaceLevel.next.colorOf(
-                                          scheme,
+                    AnimatedSize(
+                      duration: context.disableAnimations
+                          ? Duration.zero
+                          : const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topCenter,
+                      child: _sortType == -1 && _forum.goodClassifies.isNotEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    for (final c in _forum.goodClassifies)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 6,
                                         ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 5,
-                                    ),
-                                    child: Text(
-                                      c.name,
-                                      style: AppTextStyle.caption1
-                                          .of(context)
-                                          .copyWith(
-                                            color:
-                                                (_goodClassifyId ?? 0) == c.id
-                                                    ? scheme.onPrimary
-                                                    : scheme.onSurface,
+                                        child: PressScale(
+                                          scale: 0.94,
+                                          child: FrostedTapSurface(
+                                            onPressed: () {
+                                              if ((_goodClassifyId ?? 0) ==
+                                                  c.id) {
+                                                return;
+                                              }
+                                              HapticFeedback.selectionClick();
+                                              setState(() {
+                                                _goodClassifyId = c.id;
+                                                _threads = [];
+                                              });
+                                              unawaited(_load(refresh: true));
+                                            },
+                                            pill: true,
+                                            fill: (_goodClassifyId ?? 0) == c.id
+                                                ? scheme.primary
+                                                : context.surfaceLevel.next
+                                                      .colorOf(scheme),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 5,
+                                                  ),
+                                              child: Text(
+                                                c.name,
+                                                style: AppTextStyle.caption1
+                                                    .of(context)
+                                                    .copyWith(
+                                                      color:
+                                                          (_goodClassifyId ??
+                                                                  0) ==
+                                                              c.id
+                                                          ? scheme.onPrimary
+                                                          : scheme.onSurface,
+                                                    ),
+                                              ),
+                                            ),
                                           ),
-                                    ),
-                                  ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                    ],
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
                   ],
                 ),
               ),
@@ -589,6 +616,75 @@ class _ForumPageState extends State<ForumPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 吧内等级与经验：等级徽标 + 等级头衔 + 经验进度条 + `当前/升级所需`。
+///
+/// 挂在折叠头的头像右侧（[ProfileHeaderDelegate.headerAccessory]），
+/// 位置窄，所以拆两行：等级在上，进度条在下。
+/// 未登录时接口不下发这几个字段（`userLevel` 为 0），整块不渲染。
+class _ForumLevelBar extends StatelessWidget {
+  const _ForumLevelBar({required this.forum});
+
+  final TiebaForum forum;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    final goal = forum.levelUpScore;
+    final hasProgress = goal > 0 && forum.curScore > 0;
+    final progress = hasProgress ? (forum.curScore / goal).clamp(0.0, 1.0) : 0.0;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FrostedTag(
+              label: 'Lv.${forum.userLevel}',
+              color: forum.isSign ? context.success : scheme.primary,
+            ),
+            if (forum.levelName.isNotEmpty) ...[
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  forum.levelName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyle.caption1
+                      .of(context)
+                      .copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (hasProgress) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 5,
+                  backgroundColor: scheme.primary.withValues(alpha: 0.16),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${forum.curScore}/$goal',
+                style: AppTextStyle.caption2
+                    .of(context)
+                    .copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

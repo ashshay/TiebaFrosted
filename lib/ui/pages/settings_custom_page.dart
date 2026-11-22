@@ -31,6 +31,7 @@ class SettingsCustomPage extends StatelessWidget {
                   value: settings.hideMedia,
                   onChanged: settings.setHideMedia,
                 ),
+                onPressed: () => settings.setHideMedia(!settings.hideMedia),
               ),
               FrostedListRow(
                 title: const Text('隐藏帖子回复区'),
@@ -39,12 +40,16 @@ class SettingsCustomPage extends StatelessWidget {
                   value: settings.hideReply,
                   onChanged: settings.setHideReply,
                 ),
+                onPressed: () => settings.setHideReply(!settings.hideReply),
               ),
               FrostedListRow(
                 title: const Text('同时显示用户名与昵称'),
                 trailing: Switch(
                   value: settings.showBothUsernameAndNickname,
                   onChanged: settings.setShowBothUsernameAndNickname,
+                ),
+                onPressed: () => settings.setShowBothUsernameAndNickname(
+                  !settings.showBothUsernameAndNickname,
                 ),
               ),
             ],

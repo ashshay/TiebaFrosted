@@ -122,14 +122,28 @@ class SubPostTile extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                GlyphIcon(
-                                  FrostedGlyphs.thumbUp,
-                                  size: 14,
-                                  color: subPost.agree.isAgreed
-                                      ? scheme.error
-                                      : scheme.onSurfaceVariant,
-                                  fill: subPost.agree.isAgreed ? 1 : 0,
-                                ),
+                                if (context.disableAnimations)
+                                  GlyphIcon(
+                                    FrostedGlyphs.thumbUp,
+                                    size: 14,
+                                    color: subPost.agree.isAgreed
+                                        ? scheme.error
+                                        : scheme.onSurfaceVariant,
+                                    fill: subPost.agree.isAgreed ? 1 : 0,
+                                  )
+                                else
+                                  IconTheme(
+                                    data: IconThemeData(
+                                      size: 14,
+                                      color: subPost.agree.isAgreed
+                                          ? scheme.error
+                                          : scheme.onSurfaceVariant,
+                                    ),
+                                    child: AnimatedGlyph(
+                                      glyph: FrostedGlyphs.thumbUp,
+                                      filled: subPost.agree.isAgreed,
+                                    ),
+                                  ),
                                 if (subPost.agree.displayCount > 0) ...[
                                   const SizedBox(width: 4),
                                   CountRoll(

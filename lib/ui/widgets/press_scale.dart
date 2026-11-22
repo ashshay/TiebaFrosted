@@ -42,7 +42,8 @@ class _PressScaleState extends State<PressScale>
     super.dispose();
   }
 
-  bool get _active => widget.enabled && !context.disableAnimations;
+  bool get _active =>
+      widget.enabled && !(MediaQuery.maybeDisableAnimationsOf(context) ?? false);
 
   void _onDown(PointerDownEvent event) {
     if (!_active || _pointer != null) return;
@@ -54,6 +55,11 @@ class _PressScaleState extends State<PressScale>
   void _onMove(PointerMoveEvent event) {
     if (event.pointer != _pointer) return;
     if ((event.position - _origin!).distance > _cancelSlop) _release();
+  }
+
+  void _onEnd(PointerEvent event) {
+    if (event.pointer != _pointer) return;
+    _release();
   }
 
   void _release() {
@@ -68,8 +74,8 @@ class _PressScaleState extends State<PressScale>
     return Listener(
       onPointerDown: _onDown,
       onPointerMove: _onMove,
-      onPointerUp: (_) => _release(),
-      onPointerCancel: (_) => _release(),
+      onPointerUp: _onEnd,
+      onPointerCancel: _onEnd,
       child: AnimatedBuilder(
         animation: _curve,
         builder: (context, child) => Transform.scale(

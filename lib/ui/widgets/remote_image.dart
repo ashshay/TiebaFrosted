@@ -2,25 +2,11 @@ import 'package:flutter/widgets.dart';
 import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
 
+import '../../data/image_cache.dart';
 import 'glyphs.dart';
 
-const Map<String, String> tiebaImageHeaders = {
-  'User-Agent': 'bdtb for Android 12.64.1.1',
-  'Referer': 'https://tieba.baidu.com/',
-  'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-};
-
-const Map<String, String> _tiebaNoRefererHeaders = {
-  'User-Agent': 'bdtb for Android 12.64.1.1',
-  'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-};
-
-String normalizeTiebaImageUrl(String raw) {
-  final trimmed = raw.trim();
-  if (trimmed.isEmpty) return '';
-  if (trimmed.startsWith('//')) return 'https:$trimmed';
-  return trimmed;
-}
+export '../../data/image_cache.dart'
+    show normalizeTiebaImageUrl, tiebaImageHeaders;
 
 /// 根据 portrait 拼装贴吧用户头像 URL（与 TiebaLite StringUtil.getAvatarUrl 一致）。
 String tiebaAvatarUrl(String portrait) {
@@ -31,12 +17,7 @@ String tiebaAvatarUrl(String portrait) {
   return 'https://gss0.bdstatic.com/6LZ1dD3d1sgCo2Kml5_Y_D3/sys/portrait/item/$p';
 }
 
-bool _looksAnimated(String url) {
-  final lower = url.toLowerCase();
-  return lower.contains('.gif') || lower.contains('format=gif');
-}
-
-class RemoteImage extends StatefulWidget {
+class RemoteImage extends StatelessWidget {
   const RemoteImage({
     super.key,
     required this.url,
@@ -48,6 +29,7 @@ class RemoteImage extends StatefulWidget {
     this.resizeCache = true,
     this.placeholderColor,
     this.transparentPlaceholder = false,
+    this.fadeIn = true,
   });
 
   final String url;
@@ -59,94 +41,141 @@ class RemoteImage extends StatefulWidget {
   final bool resizeCache;
   final Color? placeholderColor;
   final bool transparentPlaceholder;
-
-  @override
-  State<RemoteImage> createState() => _RemoteImageState();
-}
-
-class _RemoteImageState extends State<RemoteImage> {
-  bool _fallbackWithoutReferer = false;
-
-  @override
-  void didUpdateWidget(covariant RemoteImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) {
-      _fallbackWithoutReferer = false;
-    }
-  }
+  final bool fadeIn;
 
   @override
   Widget build(BuildContext context) {
-    final bg = widget.transparentPlaceholder
+    final bg = transparentPlaceholder
         ? const Color(0x00000000)
-        : widget.placeholderColor ??
-            context.surfaceLevel.next.colorOf(context.colorScheme);
-    final normalized = normalizeTiebaImageUrl(widget.url);
+        : placeholderColor ??
+              context.surfaceLevel.next.colorOf(context.colorScheme);
+    final normalized = normalizeTiebaImageUrl(url);
 
     Widget child;
     if (normalized.isEmpty) {
       child = ColoredBox(color: bg);
     } else {
-      final dpr = MediaQuery.devicePixelRatioOf(context);
-      final allowResize = widget.resizeCache && !_looksAnimated(normalized);
-      final targetCacheW = allowResize
-          ? (widget.cacheWidth ??
-                (widget.width != null && widget.width!.isFinite
-                    ? (widget.width! * dpr).round().clamp(64, 1440)
+      final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2.0;
+      final allowResize = resizeCache && !looksAnimatedImageUrl(normalized);
+      final rawTargetW = allowResize
+          ? (cacheWidth ??
+                (width != null && width!.isFinite
+                    ? (width! * dpr).round()
                     : null))
           : null;
-      final headers = _fallbackWithoutReferer
-          ? _tiebaNoRefererHeaders
-          : tiebaImageHeaders;
-
-      child = Image.network(
+      final quantizedW = rawTargetW == null
+          ? null
+          : quantizeImageCacheWidth(rawTargetW);
+      final provider = TiebaCachedImageProvider(
         normalized,
-        key: ValueKey('$normalized|${_fallbackWithoutReferer ? 1 : 0}'),
-        width: widget.width,
-        height: widget.height,
-        fit: widget.fit,
-        headers: headers,
-        cacheWidth: targetCacheW,
+        cacheWidth: quantizedW,
+      );
+      final disableAnim =
+          !fadeIn || (MediaQuery.maybeDisableAnimationsOf(context) ?? false);
+
+      child = Image(
+        image: provider,
+        width: width,
+        height: height,
+        fit: fit,
         gaplessPlayback: true,
         filterQuality: FilterQuality.low,
-        errorBuilder: (_, _, _) {
-          if (!_fallbackWithoutReferer) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && !_fallbackWithoutReferer) {
-                setState(() => _fallbackWithoutReferer = true);
-              }
-            });
-            return ColoredBox(color: bg);
-          }
-          return ColoredBox(
-            color: context.colorScheme.surfaceContainerHighest,
-            child: Center(
-              child: GlyphIcon(
-                Glyphs.eyeOff,
-                size: 18,
-                color: context.colorScheme.onSurfaceVariant.withValues(
-                  alpha: 0.45,
-                ),
+        errorBuilder: (_, _, _) => ColoredBox(
+          color: context.colorScheme.surfaceContainerHighest,
+          child: Center(
+            child: GlyphIcon(
+              Glyphs.eyeOff,
+              size: 18,
+              color: context.colorScheme.onSurfaceVariant.withValues(
+                alpha: 0.45,
               ),
             ),
-          );
-        },
+          ),
+        ),
         frameBuilder: (context, img, frame, wasSync) {
-          if (wasSync || frame != null) return img;
-          return ColoredBox(color: bg);
+          if (wasSync) return img;
+          if (frame == null) return ColoredBox(color: bg);
+          if (disableAnim) return img;
+          return _FadeInImageFrame(child: img);
         },
       );
     }
-    if (widget.radius > 0) {
+    if (radius > 0) {
       child = ClipRSuperellipse(
-        borderRadius: BorderRadius.circular(widget.radius),
+        borderRadius: BorderRadius.circular(radius),
         child: child,
       );
     }
-    if (widget.width != null || widget.height != null) {
-      return SizedBox(width: widget.width, height: widget.height, child: child);
+    if (width != null || height != null) {
+      return SizedBox(width: width, height: height, child: child);
     }
     return child;
+  }
+}
+
+class _FadeInImageFrame extends StatefulWidget {
+  const _FadeInImageFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_FadeInImageFrame> createState() => _FadeInImageFrameState();
+}
+
+class _FadeInImageFrameState extends State<_FadeInImageFrame>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 160),
+  )..forward();
+  late final Animation<double> _opacity = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void dispose() {
+    (_opacity as CurvedAnimation).dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(opacity: _opacity, child: widget.child);
+  }
+}
+
+/// 贴吧内联表情图组件：统一走二级缓存，加载失败时优雅回退为 `#(表情名)` 文本。
+class TiebaEmoticonImage extends StatelessWidget {
+  const TiebaEmoticonImage({
+    super.key,
+    required this.url,
+    required this.size,
+    required this.fallbackName,
+    required this.fallbackStyle,
+  });
+
+  final String url;
+  final double size;
+  final String fallbackName;
+  final TextStyle fallbackStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = normalizeTiebaImageUrl(url);
+    if (normalized.isEmpty) {
+      return Text('#($fallbackName)', style: fallbackStyle);
+    }
+    return Image(
+      image: TiebaCachedImageProvider(normalized, cacheWidth: 160),
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      gaplessPlayback: true,
+      filterQuality: FilterQuality.low,
+      errorBuilder: (_, _, _) => Text('#($fallbackName)', style: fallbackStyle),
+    );
   }
 }
 

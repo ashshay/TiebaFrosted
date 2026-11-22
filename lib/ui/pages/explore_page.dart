@@ -98,207 +98,240 @@ class ExploreViewState extends State<ExploreView> {
     final threads = data.threads;
     final tabs = data.tabs;
 
-    return ListView(
-      padding: EdgeInsets.fromLTRB(14, top + 8, 14, bottom),
-      children: [
-        if (topics.isNotEmpty) ...[
-          Row(
-            children: [
-              GlyphIcon(FrostedGlyphs.flame, size: 18, color: scheme.error),
-              const SizedBox(width: 6),
-              Text(
-                '贴吧热议',
-                style: AppTextStyle.headline
-                    .of(context)
-                    .copyWith(fontWeight: FontWeight.w700),
-              ),
-              const Spacer(),
-              FrostedTapSurface(
-                onPressed: () => openHotTopicList(context),
-                pill: true,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(14, top + 8, 14, 0),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (topics.isNotEmpty) ...[
+                  Row(
                     children: [
-                      Text(
-                        '全部榜单',
-                        style: AppTextStyle.footnote
-                            .of(context)
-                            .copyWith(color: scheme.primary),
-                      ),
-                      const SizedBox(width: 2),
                       GlyphIcon(
-                        Glyphs.chevronForward,
-                        size: 14,
-                        color: scheme.primary,
+                        FrostedGlyphs.flame,
+                        size: 18,
+                        color: scheme.error,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '贴吧热议',
+                        style: AppTextStyle.headline
+                            .of(context)
+                            .copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const Spacer(),
+                      FrostedTapSurface(
+                        onPressed: () => openHotTopicList(context),
+                        pill: true,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '全部榜单',
+                                style: AppTextStyle.footnote
+                                    .of(context)
+                                    .copyWith(color: scheme.primary),
+                              ),
+                              const SizedBox(width: 2),
+                              GlyphIcon(
+                                Glyphs.chevronForward,
+                                size: 14,
+                                color: scheme.primary,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          FrostedCard(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Column(
-              children: [
-                for (var i = 0; i < topics.length && i < 6; i++) ...[
-                  FrostedTapSurface(
-                    onPressed: () => openHotTopicDetail(
-                      context,
-                      topicId: topics[i].topicId,
-                      topicName: topics[i].topicName,
-                    ),
-                    radius: AppCorner.sm,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 22,
-                            child: Text(
-                              '${i + 1}',
-                              style: AppTextStyle.headline.of(context).copyWith(
-                                color: i < 3
-                                    ? scheme.error
-                                    : scheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w700,
+                  const SizedBox(height: 8),
+                  FrostedCard(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Column(
+                      children: [
+                        for (var i = 0; i < topics.length && i < 6; i++) ...[
+                          FrostedTapSurface(
+                            onPressed: () => openHotTopicDetail(
+                              context,
+                              topicId: topics[i].topicId,
+                              topicName: topics[i].topicName,
+                            ),
+                            radius: AppCorner.sm,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 22,
+                                    child: Text(
+                                      '${i + 1}',
+                                      style: AppTextStyle.headline
+                                          .of(context)
+                                          .copyWith(
+                                            color: i < 3
+                                                ? scheme.error
+                                                : scheme.onSurfaceVariant,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      topics[i].topicName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyle.subheadline
+                                          .of(context)
+                                          .copyWith(color: scheme.onSurface),
+                                    ),
+                                  ),
+                                  if (topics[i].discussNum > 0) ...[
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '${formatCount(topics[i].discussNum)}热议',
+                                      style: AppTextStyle.caption1
+                                          .of(context)
+                                          .copyWith(
+                                            color: scheme.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                           ),
-                          Expanded(
-                            child: Text(
-                              topics[i].topicName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyle.subheadline
-                                  .of(context)
-                                  .copyWith(color: scheme.onSurface),
+                          if (i < topics.length - 1 && i < 5)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: 36,
+                                right: 14,
+                              ),
+                              child: Container(
+                                height: 0.5,
+                                color: scheme.outlineVariant.withValues(
+                                  alpha: 0.4,
+                                ),
+                              ),
                             ),
-                          ),
-                          if (topics[i].discussNum > 0) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              '${formatCount(topics[i].discussNum)}热议',
-                              style: AppTextStyle.caption1
-                                  .of(context)
-                                  .copyWith(color: scheme.onSurfaceVariant),
-                            ),
-                          ],
                         ],
-                      ),
+                      ],
                     ),
                   ),
-                  if (i < topics.length - 1 && i < 5)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 36, right: 14),
-                      child: Container(
-                        height: 0.5,
-                        color: scheme.outlineVariant.withValues(alpha: 0.4),
-                      ),
-                    ),
+                  const SizedBox(height: 16),
                 ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-        if (tabs.isNotEmpty) ...[
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final t in tabs) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FrostedTapSurface(
-                      onPressed: () {
-                        setState(() {
-                          _selectedTabCode = t.tabCode.isNotEmpty
-                              ? t.tabCode
-                              : 'all';
-                          _selectedTabId = '${t.tabId}';
-                        });
-                        unawaited(_load());
-                      },
-                      pill: true,
-                      fill: _selectedTabCode == t.tabCode
-                          ? scheme.primary
-                          : context.surfaceLevel.next.colorOf(scheme),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 7,
-                        ),
-                        child: Text(
-                          t.tabName,
-                          style: AppTextStyle.footnote.of(context).copyWith(
-                            color: _selectedTabCode == t.tabCode
-                                ? scheme.onPrimary
-                                : scheme.onSurface,
-                            fontWeight: FontWeight.w600,
+                if (tabs.isNotEmpty) ...[
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final t in tabs) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FrostedTapSurface(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedTabCode = t.tabCode.isNotEmpty
+                                      ? t.tabCode
+                                      : 'all';
+                                  _selectedTabId = '${t.tabId}';
+                                });
+                                unawaited(_load());
+                              },
+                              pill: true,
+                              fill: _selectedTabCode == t.tabCode
+                                  ? scheme.primary
+                                  : context.surfaceLevel.next.colorOf(scheme),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 7,
+                                ),
+                                child: Text(
+                                  t.tabName,
+                                  style: AppTextStyle.footnote
+                                      .of(context)
+                                      .copyWith(
+                                        color: _selectedTabCode == t.tabCode
+                                            ? scheme.onPrimary
+                                            : scheme.onSurface,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                        ],
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 12),
                 ],
               ],
             ),
           ),
-          const SizedBox(height: 12),
-        ],
+        ),
         if (threads.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 48),
-            child: FrostedEmpty(
-              title: '暂无热议帖子',
-              icon: FrostedGlyphs.explore,
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(14, 48, 14, bottom + 48),
+              child: const FrostedEmpty(
+                title: '暂无热议帖子',
+                icon: FrostedGlyphs.explore,
+              ),
             ),
           )
         else
-          for (var i = 0; i < threads.length; i++) ...[
-            if (i > 0) const SizedBox(height: 10),
-            ThreadCard(
-              key: ValueKey('hot-${threads[i].effectiveId}'),
-              thread: threads[i],
-              onTap: () => openThread(
-                context,
-                threadId: threads[i].effectiveId,
-                forumId: threads[i].forumId,
-                forumName: threads[i].forumName,
-                initialTitle: threads[i].displayTitle,
-              ),
-              onLongPress: () => showThreadContextMenu(context, threads[i]),
-              onCommentTap: () => openThread(
-                context,
-                threadId: threads[i].effectiveId,
-                forumId: threads[i].forumId,
-                forumName: threads[i].forumName,
-                initialTitle: threads[i].displayTitle,
-                focusReplies: true,
-              ),
-              onForumTap: () => openForum(context, threads[i].forumName),
-              onAuthorTap: threads[i].author.id > 0
-                  ? () => openUserProfile(
-                      context,
-                      uid: threads[i].author.id,
-                      portrait: threads[i].author.portrait,
-                      initialName: threads[i].author.displayName,
-                    )
-                  : null,
-              onImageTap: (imgs, idx) =>
-                  openImageViewer(context, images: imgs, initialIndex: idx),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(14, 0, 14, bottom),
+            sliver: SliverList.separated(
+              itemCount: threads.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (context, i) {
+                final t = threads[i];
+                return ThreadCard(
+                  key: ValueKey('hot-${t.effectiveId}'),
+                  thread: t,
+                  onTap: () => openThread(
+                    context,
+                    threadId: t.effectiveId,
+                    forumId: t.forumId,
+                    forumName: t.forumName,
+                    initialTitle: t.displayTitle,
+                  ),
+                  onLongPress: () => showThreadContextMenu(context, t),
+                  onCommentTap: () => openThread(
+                    context,
+                    threadId: t.effectiveId,
+                    forumId: t.forumId,
+                    forumName: t.forumName,
+                    initialTitle: t.displayTitle,
+                    focusReplies: true,
+                  ),
+                  onForumTap: () => openForum(context, t.forumName),
+                  onAuthorTap: t.author.id > 0
+                      ? () => openUserProfile(
+                          context,
+                          uid: t.author.id,
+                          portrait: t.author.portrait,
+                          initialName: t.author.displayName,
+                        )
+                      : null,
+                  onImageTap: (imgs, idx) =>
+                      openImageViewer(context, images: imgs, initialIndex: idx),
+                );
+              },
             ),
-          ],
+          ),
       ],
     );
   }

@@ -12,6 +12,7 @@ import '../../data/local_db.dart';
 import '../../data/repo.dart';
 import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
+import '../widgets/press_scale.dart';
 import '../widgets/remote_image.dart';
 
 enum ReplyMode { reply, newThread }
@@ -285,37 +286,50 @@ class _ReplyPageState extends State<ReplyPage> {
               ),
             ),
           ),
-          if (_showEmojis)
-            Container(
-              height: 220 + bottom,
-              color: SurfaceLevel.card.colorOf(scheme),
-              padding: EdgeInsets.fromLTRB(12, 10, 12, bottom + 10),
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 7,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                ),
-                itemCount: TiebaEmoticons.all.length,
-                itemBuilder: (context, idx) {
-                  final emo = TiebaEmoticons.all[idx];
-                  return FrostedTapSurface(
-                    onPressed: () => _insertEmoji(emo),
-                    radius: AppCorner.sm,
-                    child: Center(
-                      child: RemoteImage(
-                        url: emo.imageUrl,
-                        width: 28,
-                        height: 28,
-                        fit: BoxFit.contain,
-                        transparentPlaceholder: true,
-                        resizeCache: false,
-                      ),
+          AnimatedSize(
+            duration: context.disableAnimations
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: _showEmojis
+                ? Container(
+                    height: 220 + bottom,
+                    color: SurfaceLevel.card.colorOf(scheme),
+                    padding: EdgeInsets.fromLTRB(12, 10, 12, bottom + 10),
+                    child: GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 7,
+                            mainAxisSpacing: 8,
+                            crossAxisSpacing: 8,
+                          ),
+                      itemCount: TiebaEmoticons.all.length,
+                      itemBuilder: (context, idx) {
+                        final emo = TiebaEmoticons.all[idx];
+                        return PressScale(
+                          scale: 0.9,
+                          child: FrostedTapSurface(
+                            onPressed: () => _insertEmoji(emo),
+                            radius: AppCorner.sm,
+                            child: Center(
+                              child: RemoteImage(
+                                url: emo.imageUrl,
+                                width: 28,
+                                height: 28,
+                                cacheWidth: 160,
+                                fit: BoxFit.contain,
+                                transparentPlaceholder: true,
+                                fadeIn: false,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
-            ),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
         ],
       ),
       body: ListView(

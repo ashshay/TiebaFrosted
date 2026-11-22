@@ -33,6 +33,13 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="tieba"/>
             </intent-filter>
+            <!-- 贴吧网页「App内查看」按钮发的就是这条协议，官方客户端与贴吧 Lite 都靠它接住。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="com.baidu.tieba" android:host="unidispatch"/>
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>

@@ -102,14 +102,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = context.watch<ChromeController>();
+    final chrome = context.read<ChromeController>();
     final store = context.watch<FrostedStore>();
     final top = pageTopInset(context);
     final bottom = pageBottomInset(context);
 
     return PrismScaffold(
       bar: FrostedAppBar(
-        hidden: chrome.hidden,
+        bindChrome: true,
         title: SizedBox(
           width: 176,
           child: SegmentedControl<int>(

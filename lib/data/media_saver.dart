@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'image_cache.dart';
 import 'native_channels.dart';
 
 /// 图片与视频保存到系统相册（经由 Android MediaStore 通道）。
@@ -13,18 +14,20 @@ class MediaSaver {
   final Dio _dio;
 
   Future<String> saveImageFromUrl(String url) async {
-    final normalized = url.startsWith('//') ? 'https:$url' : url;
-    final resp = await _dio.get<List<int>>(
-      normalized,
-      options: Options(
-        responseType: ResponseType.bytes,
-        headers: const {
-          'User-Agent': 'bdtb for Android 12.64.1.1',
-          'Referer': 'https://tieba.baidu.com/',
-        },
-      ),
-    );
-    final bytes = Uint8List.fromList(resp.data ?? const []);
+    final normalized = normalizeTiebaImageUrl(url);
+    Uint8List bytes;
+    try {
+      bytes = await TiebaImageCache.instance.getBytes(normalized);
+    } on Object {
+      final resp = await _dio.get<List<int>>(
+        normalized,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: tiebaImageHeaders,
+        ),
+      );
+      bytes = Uint8List.fromList(resp.data ?? const []);
+    }
     if (bytes.isEmpty) throw StateError('下载图片为空');
     final ext = _guessExt(normalized, defaultExt: 'jpg');
     final name = 'tiebafrosted_${DateTime.now().millisecondsSinceEpoch}.$ext';

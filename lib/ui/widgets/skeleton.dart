@@ -3,56 +3,42 @@ import 'package:prism_ui/prism_ui.dart';
 
 import 'common.dart';
 
-/// 贴吧列表骨架屏（基于 prism_ui SurfaceLevel 与超椭圆）。
+/// 贴吧列表骨架屏（复用 prism_ui 墙钟同步呼吸骨架条，零全屏滤镜开销）。
 class ThreadCardSkeleton extends StatelessWidget {
   const ThreadCardSkeleton({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final barColor = context.colorScheme.surfaceContainerHighest;
-    Widget bar(double width, double height) => Container(
-      width: width,
-      height: height,
-      decoration: ShapeDecoration(color: barColor, shape: AppShape.xs),
-    );
-
-    return FrostedCard(
+    return const FrostedCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: ShapeDecoration(
-                  color: barColor,
-                  shape: AppShape.full,
-                ),
-              ),
-              const SizedBox(width: 10),
+              SkeletonPill(width: 32, height: 32),
+              SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  bar(96, 12),
-                  const SizedBox(height: 6),
-                  bar(64, 10),
+                  SkeletonPill(width: 96, height: 12),
+                  SizedBox(height: 6),
+                  SkeletonPill(width: 64, height: 10),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          bar(double.infinity, 16),
-          const SizedBox(height: 8),
-          bar(220, 14),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
+          SkeletonPill(width: double.infinity, height: 16),
+          SizedBox(height: 8),
+          SkeletonPill(width: 220, height: 14),
+          SizedBox(height: 12),
           Row(
             children: [
-              bar(48, 12),
-              const SizedBox(width: 16),
-              bar(48, 12),
-              const SizedBox(width: 16),
-              bar(48, 12),
+              SkeletonPill(width: 48, height: 12),
+              SizedBox(width: 16),
+              SkeletonPill(width: 48, height: 12),
+              SizedBox(width: 16),
+              SkeletonPill(width: 48, height: 12),
             ],
           ),
         ],
@@ -71,7 +57,12 @@ class FeedSkeletonList extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.separated(
       physics: const NeverScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(14, topInset + 12, 14, pageBottomInset(context)),
+      padding: EdgeInsets.fromLTRB(
+        14,
+        topInset + 12,
+        14,
+        pageBottomInset(context),
+      ),
       itemCount: count,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, _) => const ThreadCardSkeleton(),

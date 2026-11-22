@@ -6,6 +6,7 @@ import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/settings.dart';
+import '../chrome.dart';
 import 'glyphs.dart';
 import 'press_scale.dart';
 
@@ -251,80 +252,79 @@ Future<T?> showFrostedChoices<T>(
     context: context,
     child: AlertDialog(
       title: title,
+      showRim: false,
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消'),
         ),
       ],
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 380),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final c in choices)
-                FrostedTapSurface(
-                  onPressed: () => Navigator.of(context).pop(c.value),
-                  radius: AppCorner.md,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 11,
-                    ),
-                    child: Row(
-                      children: [
-                        if (c.leading != null) ...[
-                          c.leading!,
-                          const SizedBox(width: 10),
-                        ],
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                c.label,
-                                style: AppTextStyle.body
-                                    .of(context)
-                                    .copyWith(
-                                      color: c.destructive
-                                          ? context.colorScheme.error
-                                          : context.colorScheme.onSurface,
-                                      fontWeight: c.selected
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                    ),
-                              ),
-                              if (c.subtitle != null &&
-                                  c.subtitle!.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  c.subtitle!,
-                                  style: AppTextStyle.caption1
-                                      .of(context)
-                                      .copyWith(
-                                        color: context
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                      ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        if (c.selected)
-                          GlyphIcon(
-                            Glyphs.check,
-                            size: 18,
-                            color: context.colorScheme.primary,
-                          ),
-                      ],
-                    ),
-                  ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final c in choices)
+            FrostedTapSurface(
+              onPressed: () => Navigator.of(context).pop(c.value),
+              radius: AppCorner.md,
+              fill: c.selected
+                  ? context.colorScheme.primary.withValues(alpha: 0.12)
+                  : const Color(0x00000000),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 11,
                 ),
-            ],
-          ),
-        ),
+                child: Row(
+                  children: [
+                    if (c.leading != null) ...[
+                      c.leading!,
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            c.label,
+                            style: AppTextStyle.body
+                                .of(context)
+                                .copyWith(
+                                  color: c.destructive
+                                      ? context.colorScheme.error
+                                      : context.colorScheme.onSurface,
+                                  fontWeight: c.selected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                ),
+                          ),
+                          if (c.subtitle != null &&
+                              c.subtitle!.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              c.subtitle!,
+                              style: AppTextStyle.caption1
+                                  .of(context)
+                                  .copyWith(
+                                    color: context
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (c.selected)
+                      GlyphIcon(
+                        Glyphs.check,
+                        size: 18,
+                        color: context.colorScheme.primary,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     ),
   );
@@ -365,6 +365,7 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.toolbarHeight,
     this.centerTitle = false,
     this.hidden = false,
+    this.bindChrome = false,
   });
 
   final Widget? title;
@@ -375,20 +376,26 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool centerTitle;
   final bool hidden;
 
+  /// 为 true 时内部自动订阅 [ChromeController.hidden]，避免主页面滚动隐藏顶栏时重建整个列表树。
+  final bool bindChrome;
+
   @override
   Size get preferredSize => Size.fromHeight(toolbarHeight ?? pageToolbarHeight);
 
   @override
   Widget build(BuildContext context) {
     final disabled = context.disableAnimations;
+    final isHidden = bindChrome
+        ? context.select<ChromeController, bool>((c) => c.hidden)
+        : hidden;
     return IgnorePointer(
-      ignoring: hidden,
+      ignoring: isHidden,
       child: AnimatedSlide(
-        offset: hidden ? const Offset(0, -1) : Offset.zero,
+        offset: isHidden ? const Offset(0, -1) : Offset.zero,
         duration: disabled ? Duration.zero : const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
         child: AnimatedOpacity(
-          opacity: hidden ? 0 : 1,
+          opacity: isHidden ? 0 : 1,
           duration: disabled
               ? Duration.zero
               : const Duration(milliseconds: 160),

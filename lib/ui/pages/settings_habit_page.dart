@@ -21,18 +21,17 @@ class SettingsHabitPage extends StatelessWidget {
           bottom: MediaQuery.paddingOf(context).bottom + 24,
         ),
         children: [
-          const FrostedSectionTitle('启动默认页'),
+          const FrostedSectionTitle('动态默认页'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: FrostedCard(
               child: SegmentedControl<int>(
-                value: settings.startTab,
-                onChanged: settings.setStartTab,
+                value: settings.defaultFeedTab,
+                onChanged: settings.setDefaultFeedTab,
                 segments: const [
-                  (0, '首页'),
-                  (1, '动态'),
-                  (2, '消息'),
-                  (3, '我的'),
+                  (0, '推荐'),
+                  (1, '关注'),
+                  (2, '热榜'),
                 ],
               ),
             ),
@@ -61,6 +60,8 @@ class SettingsHabitPage extends StatelessWidget {
                   value: settings.loadOriginImage,
                   onChanged: settings.setLoadOriginImage,
                 ),
+                onPressed: () =>
+                    settings.setLoadOriginImage(!settings.loadOriginImage),
               ),
               FrostedListRow(
                 title: const Text('卡片显示正文摘要'),
@@ -68,12 +69,18 @@ class SettingsHabitPage extends StatelessWidget {
                   value: settings.showThreadAbstract,
                   onChanged: settings.setShowThreadAbstract,
                 ),
+                onPressed: () => settings.setShowThreadAbstract(
+                  !settings.showThreadAbstract,
+                ),
               ),
               FrostedListRow(
                 title: const Text('单行显示帖子标题'),
                 trailing: Switch(
                   value: settings.showSingleLineTitle,
                   onChanged: settings.setShowSingleLineTitle,
+                ),
+                onPressed: () => settings.setShowSingleLineTitle(
+                  !settings.showSingleLineTitle,
                 ),
               ),
               FrostedListRow(
@@ -83,6 +90,8 @@ class SettingsHabitPage extends StatelessWidget {
                   value: settings.confirmBeforeLike,
                   onChanged: settings.setConfirmBeforeLike,
                 ),
+                onPressed: () =>
+                    settings.setConfirmBeforeLike(!settings.confirmBeforeLike),
               ),
               FrostedListRow(
                 title: const Text('首页显示「经过贴吧」'),
@@ -90,6 +99,9 @@ class SettingsHabitPage extends StatelessWidget {
                 trailing: Switch(
                   value: settings.homeShowHistoryForum,
                   onChanged: settings.setHomeShowHistoryForum,
+                ),
+                onPressed: () => settings.setHomeShowHistoryForum(
+                  !settings.homeShowHistoryForum,
                 ),
               ),
               FrostedListRow(
@@ -99,12 +111,17 @@ class SettingsHabitPage extends StatelessWidget {
                   value: settings.swipeSwitchFeed,
                   onChanged: settings.setSwipeSwitchFeed,
                 ),
+                onPressed: () =>
+                    settings.setSwipeSwitchFeed(!settings.swipeSwitchFeed),
               ),
               FrostedListRow(
                 title: const Text('长按底栏「我的」快速切号'),
                 trailing: Switch(
                   value: settings.quickSwitchAccount,
                   onChanged: settings.setQuickSwitchAccount,
+                ),
+                onPressed: () => settings.setQuickSwitchAccount(
+                  !settings.quickSwitchAccount,
                 ),
               ),
               FrostedListRow(
@@ -113,6 +130,8 @@ class SettingsHabitPage extends StatelessWidget {
                   value: settings.profileTabAvatar,
                   onChanged: settings.setProfileTabAvatar,
                 ),
+                onPressed: () =>
+                    settings.setProfileTabAvatar(!settings.profileTabAvatar),
               ),
             ],
           ),
