@@ -85,6 +85,14 @@ class SettingsHabitPage extends StatelessWidget {
                 ),
               ),
               FrostedListRow(
+                title: const Text('左右滑动切换动态页'),
+                subtitle: const Text('在推荐、关注、热榜之间横滑切换'),
+                trailing: Switch(
+                  value: settings.swipeSwitchFeed,
+                  onChanged: settings.setSwipeSwitchFeed,
+                ),
+              ),
+              FrostedListRow(
                 title: const Text('长按底栏「我的」快速切号'),
                 trailing: Switch(
                   value: settings.quickSwitchAccount,

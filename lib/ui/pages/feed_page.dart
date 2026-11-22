@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
@@ -16,12 +17,14 @@ import '../widgets/glyphs.dart';
 import '../widgets/press_scale.dart';
 import '../widgets/refresh.dart';
 import '../widgets/skeleton.dart';
+import '../widgets/swipe_pager.dart';
 import '../widgets/thread_card.dart';
 import 'explore_page.dart';
 
 /// 动态页：原首页的「推荐」与「关注」两条流合并到底栏一格，顶栏分段切换。
 ///
-/// 双击底栏「动态」会把当前那条流刷新并回到顶部。
+/// 顶栏分段之外还能左右滑动切页（可在「设置 → 使用习惯」关掉）；双击底栏「动态」
+/// 会把当前那条流刷新并回到顶部。
 class FeedPage extends StatefulWidget {
   const FeedPage({super.key});
 
@@ -30,6 +33,8 @@ class FeedPage extends StatefulWidget {
 }
 
 class _FeedPageState extends State<FeedPage> {
+  static const _tabs = ['推荐', '关注', '热榜'];
+
   final ScrollController _scroll = ScrollController();
   final GlobalKey<ExploreViewState> _exploreKey = GlobalKey<ExploreViewState>();
   ChromeController? _chrome;
@@ -121,6 +126,13 @@ class _FeedPageState extends State<FeedPage> {
     if (next == 1 && !_concernLoadedOnce) {
       unawaited(_loadConcern(refresh: true));
     }
+  }
+
+  /// 横滑切页：和点分段走同一条路，只是多给一次轻震。
+  void _swipeToTab(int next) {
+    if (next == _tab) return;
+    HapticFeedback.selectionClick();
+    _switchTab(next);
   }
 
   Future<void> _loadRec({required bool refresh}) async {
@@ -255,6 +267,7 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     final chrome = context.watch<ChromeController>();
     final store = context.watch<FrostedStore>();
+    final settings = context.watch<FrostedSettings>();
 
     return PrismScaffold(
       bar: FrostedAppBar(
@@ -304,7 +317,13 @@ class _FeedPageState extends State<FeedPage> {
         child: FrostedRefresh(
           topInset: pageTopInset(context),
           onRefresh: _refreshCurrentTab,
-          child: _buildBody(context, store),
+          child: SwipePager(
+            index: _tab,
+            count: _tabs.length,
+            enabled: settings.swipeSwitchFeed,
+            onIndexChanged: _swipeToTab,
+            child: _buildBody(context, store),
+          ),
         ),
       ),
     );

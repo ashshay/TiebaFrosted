@@ -38,6 +38,9 @@ class FrostedSettings extends ChangeNotifier {
   /// 「进吧」页排列：false 为多列网格（原版默认），true 为单列列表。
   bool forumListSingle = false;
 
+  /// 动态页左右滑动切换「推荐 / 关注 / 热榜」。
+  bool swipeSwitchFeed = true;
+
   /// 启动时停在底栏哪一格：0 首页 / 1 动态 / 2 消息 / 3 我的。
   int startTab = 0;
 
@@ -86,6 +89,7 @@ class FrostedSettings extends ChangeNotifier {
     hideReply = _prefs.getBool('hide_reply') ?? false;
     hideMedia = _prefs.getBool('hide_media') ?? false;
     forumListSingle = _prefs.getBool('forum_list_single') ?? false;
+    swipeSwitchFeed = _prefs.getBool('swipe_switch_feed') ?? true;
     startTab = (_prefs.getInt('start_tab') ?? 0).clamp(0, 3);
 
     enableBlock = _prefs.getBool('enable_block') ?? true;
@@ -194,6 +198,12 @@ class FrostedSettings extends ChangeNotifier {
   Future<void> setForumListSingle(bool value) async {
     forumListSingle = value;
     await _prefs.setBool('forum_list_single', value);
+    notifyListeners();
+  }
+
+  Future<void> setSwipeSwitchFeed(bool value) async {
+    swipeSwitchFeed = value;
+    await _prefs.setBool('swipe_switch_feed', value);
     notifyListeners();
   }
 
