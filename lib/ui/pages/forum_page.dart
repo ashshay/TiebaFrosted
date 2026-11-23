@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -10,6 +11,7 @@ import '../../data/repo.dart';
 import '../../data/settings.dart';
 import '../routes.dart';
 import '../theme.dart';
+import '../widgets/capsule_tab_strip.dart';
 import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/press_scale.dart';
@@ -18,7 +20,7 @@ import '../widgets/refresh.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/thread_card.dart';
 
-/// 贴吧主页：折叠头 + 关注/签到 + 最新回复/最新发布/精品 排序 + 发帖/吧资料/吧规。
+/// 贴吧主页：折叠头 + 关注/签到 + 帖子分区（最新 / 精品 / 吧内分区）+ 发帖/吧资料/吧规。
 class ForumPage extends StatefulWidget {
   const ForumPage({
     super.key,
@@ -34,29 +36,30 @@ class ForumPage extends StatefulWidget {
 }
 
 class _ForumPageState extends State<ForumPage> {
+  static const _latestKey = 'latest';
+  static const _goodKey = 'good';
+  static const _tabKeyPrefix = 'tab-';
+
   final ScrollController _scroll = ScrollController();
+  final Map<String, _SectionState> _sections = {};
 
   TiebaForum _forum = const TiebaForum();
-  List<TiebaThread> _threads = [];
-  List<int> _pendingIds = [];
+  List<ForumTab> _generalTabs = const [];
   String _tbs = '';
-  int _sortType = 0; // 0=最新回复, 1=最新发布, -1=精品
-  int? _goodClassifyId;
-  int _page = 1;
-  bool _hasMore = true;
-  bool _loading = true;
-  bool _loadingMore = false;
+  String _section = _latestKey;
   bool _signing = false;
-  String? _error;
+  double _swipeDx = 0;
+
+  String get _forumName =>
+      _forum.name.isNotEmpty ? _forum.name : widget.forumName;
 
   @override
   void initState() {
     super.initState();
-    _forum = TiebaForum(name: widget.forumName, avatar: widget.initialAvatar);
     _scroll.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _sortType = context.read<FrostedSettings>().defaultSortType;
-      unawaited(_load(refresh: true));
+      if (!mounted) return;
+      unawaited(_load(key: _section, refresh: true));
     });
   }
 
@@ -66,91 +69,270 @@ class _ForumPageState extends State<ForumPage> {
     super.dispose();
   }
 
+  // ---------------------------------------------------------------------------
+  // 分区模型：最新（带排序菜单）/ 精品 / 吧内通用分区
+  // ---------------------------------------------------------------------------
+
+  List<CapsuleTabItem<String>> get _stripTabs => [
+    CapsuleTabItem(value: _latestKey, label: '最新', onMenuTap: _pickLatestSort),
+    const CapsuleTabItem(value: _goodKey, label: '精品'),
+    for (final tab in _generalTabs)
+      CapsuleTabItem(
+        value: '$_tabKeyPrefix${tab.tabId}',
+        label: tab.tabName,
+        onMenuTap: tab.sortMenu.isEmpty ? null : () => _pickSectionSort(tab),
+      ),
+  ];
+
+  ForumTab? _tabOf(String key) {
+    if (!key.startsWith(_tabKeyPrefix)) return null;
+    final tabId = int.tryParse(key.substring(_tabKeyPrefix.length));
+    if (tabId == null) return null;
+    for (final tab in _generalTabs) {
+      if (tab.tabId == tabId) return tab;
+    }
+    return null;
+  }
+
+  _SectionState _stateOf(String key) {
+    final existing = _sections[key];
+    if (existing != null) return existing;
+    final created = _SectionState(sortType: _initialSortFor(key));
+    _sections[key] = created;
+    return created;
+  }
+
+  int _initialSortFor(String key) {
+    if (key == _latestKey) {
+      return context.read<FrostedSettings>().defaultSortType.clamp(0, 1);
+    }
+    if (key == _goodKey) return -1;
+    final menu = _tabOf(key)?.sortMenu ?? const <TiebaSortOption>[];
+    return menu.isEmpty ? -1 : menu.first.sortType;
+  }
+
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    if (_scroll.offset >= _scroll.position.maxScrollExtent - 360 &&
-        _hasMore &&
-        !_loading &&
-        !_loadingMore) {
-      unawaited(_load(refresh: false));
+    final state = _sections[_section];
+    if (state == null) return;
+    if (!state.hasMore || state.loading || state.loadingMore) return;
+    if (_scroll.offset >= _scroll.position.maxScrollExtent - 360) {
+      unawaited(_load(key: _section, refresh: false));
     }
   }
 
-  Future<void> _load({required bool refresh}) async {
+  // ---------------------------------------------------------------------------
+  // 拉取
+  // ---------------------------------------------------------------------------
+
+  Future<void> _load({required String key, required bool refresh}) async {
+    final state = _stateOf(key);
+    final tab = _tabOf(key);
+    final isTab = key.startsWith(_tabKeyPrefix);
+    if (isTab && (tab == null || _forum.id <= 0)) return;
+
     if (refresh) {
       setState(() {
-        _loading = _threads.isEmpty;
-        _error = null;
+        state.loading = state.threads.isEmpty;
+        state.error = null;
       });
     } else {
-      setState(() => _loadingMore = true);
+      setState(() => state.loadingMore = true);
     }
 
     try {
       final repo = context.read<TiebaRepo>();
-      if (!refresh && _pendingIds.isNotEmpty && _forum.id > 0) {
-        final batch = _pendingIds.take(30).toList();
-        _pendingIds = _pendingIds.skip(30).toList();
-        final more = await repo.getForumThreadsByIds(
+      if (isTab) {
+        final nextPage = refresh ? 1 : state.page + 1;
+        final res = await repo.getForumTabThreads(
           forumId: _forum.id,
-          forumName: _forum.name.isNotEmpty ? _forum.name : widget.forumName,
-          threadIds: batch,
-          page: _page,
-          sortType: _sortType,
+          tab: tab!,
+          sortType: state.sortType,
+          page: nextPage,
+          lastThreadId: refresh ? 0 : state.lastThreadId,
         );
         if (!mounted) return;
-        final seen = _threads.map((e) => e.effectiveId).toSet();
         setState(() {
-          _threads = [
-            ..._threads,
-            for (final t in more)
-              if (seen.add(t.effectiveId)) t,
-          ];
-          _loadingMore = false;
+          _mergeThreads(state, res.threads, refresh: refresh);
+          state.page = nextPage;
+          if (res.lastThreadId > 0) state.lastThreadId = res.lastThreadId;
+          state.hasMore = res.hasMore;
+          state.loading = false;
+          state.loadingMore = false;
+          state.loaded = true;
         });
         return;
       }
 
-      final nextPage = refresh ? 1 : _page + 1;
+      final sortType = key == _goodKey ? -1 : state.sortType;
+      // 置顶帖与部分楼层不在 thread_list 里，只给 id，按 30 个一批补齐。
+      if (!refresh && state.pending.isNotEmpty) {
+        final batch = state.pending.take(30).toList();
+        state.pending.removeRange(0, math.min(30, state.pending.length));
+        final more = await repo.getForumThreadsByIds(
+          forumId: _forum.id,
+          forumName: _forumName,
+          threadIds: batch,
+          page: state.page,
+          sortType: sortType,
+        );
+        if (!mounted) return;
+        setState(() {
+          _mergeThreads(state, more, refresh: false);
+          state.loadingMore = false;
+          state.loaded = true;
+        });
+        return;
+      }
+
+      final nextPage = refresh ? 1 : state.page + 1;
       final res = await repo.getForumPage(
         forumName: widget.forumName,
         page: nextPage,
         loadType: refresh ? 1 : 2,
-        sortType: _sortType,
-        goodClassifyId: _sortType == -1 ? (_goodClassifyId ?? 0) : null,
+        sortType: sortType,
+        goodClassifyId: key == _goodKey ? (state.classifyId ?? 0) : null,
       );
       if (!mounted) return;
       final loadedIds = res.threads.map((e) => e.effectiveId).toSet();
-      final remainingIds = res.threadIds
+      final remaining = res.threadIds
           .where((id) => !loadedIds.contains(id))
           .toList();
+      final generalTabs = res.generalTabs;
+      final hasTabInfo = res.navTabs.isNotEmpty || res.tabs.isNotEmpty;
       setState(() {
         if (res.forum.name.isNotEmpty) _forum = res.forum;
         if (res.tbs.isNotEmpty) _tbs = res.tbs;
-        if (refresh) {
-          _threads = res.threads;
-        } else {
-          final seen = _threads.map((e) => e.effectiveId).toSet();
-          _threads = [
-            ..._threads,
-            for (final t in res.threads)
-              if (seen.add(t.effectiveId)) t,
-          ];
-        }
-        _pendingIds = remainingIds;
-        _page = nextPage;
-        _hasMore = res.page.hasMore || remainingIds.isNotEmpty;
-        _loading = false;
-        _loadingMore = false;
+        if (hasTabInfo) _generalTabs = generalTabs;
+        _mergeThreads(state, res.threads, refresh: refresh);
+        state.pending = remaining;
+        state.page = nextPage;
+        state.hasMore = res.page.hasMore || remaining.isNotEmpty;
+        state.loading = false;
+        state.loadingMore = false;
+        state.loaded = true;
       });
+      if (refresh) _dropStaleSection();
     } on Object catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = cleanError(e);
-        _loading = false;
-        _loadingMore = false;
+        state.error = cleanError(e);
+        state.loading = false;
+        state.loadingMore = false;
+        state.loaded = true;
       });
     }
+  }
+
+  void _mergeThreads(
+    _SectionState state,
+    List<TiebaThread> incoming, {
+    required bool refresh,
+  }) {
+    if (refresh) {
+      state.threads
+        ..clear()
+        ..addAll(incoming);
+      return;
+    }
+    final seen = state.threads.map((e) => e.effectiveId).toSet();
+    state.threads.addAll(incoming.where((t) => seen.add(t.effectiveId)));
+  }
+
+  /// 分区表随吧主页响应刷新，当前分区若已不存在就退回「最新」。
+  void _dropStaleSection() {
+    final tabs = _stripTabs;
+    if (tabs.any((tab) => tab.value == _section)) return;
+    _section = tabs.first.value;
+    unawaited(_load(key: _section, refresh: true));
+  }
+
+  Future<void> _refreshCurrent() => _load(key: _section, refresh: true);
+
+  // ---------------------------------------------------------------------------
+  // 分区切换 / 排序菜单
+  // ---------------------------------------------------------------------------
+
+  void _switchSection(String key) {
+    if (key == _section) return;
+    final outgoing = _sections[_section];
+    if (outgoing != null && _scroll.hasClients) {
+      outgoing.offset = _scroll.offset;
+    }
+    final incoming = _stateOf(key);
+    setState(() => _section = key);
+    if (!incoming.loaded && !incoming.loading) {
+      unawaited(_load(key: key, refresh: true));
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final target = incoming.offset.clamp(
+        0.0,
+        _scroll.position.maxScrollExtent,
+      );
+      if ((_scroll.offset - target).abs() > 1) _scroll.jumpTo(target);
+    });
+  }
+
+  void _switchSectionBy(int step) {
+    final tabs = _stripTabs;
+    if (tabs.length < 2) return;
+    final index = tabs.indexWhere((tab) => tab.value == _section);
+    final next = (index < 0 ? 0 : index) + step;
+    if (next < 0 || next >= tabs.length) return;
+    HapticFeedback.selectionClick();
+    _switchSection(tabs[next].value);
+  }
+
+  Future<void> _pickLatestSort() async {
+    final settings = context.read<FrostedSettings>();
+    final current = settings.defaultSortType.clamp(0, 1);
+    final picked = await showFrostedChoices<int>(
+      context,
+      title: '最新排序',
+      choices: [
+        FrostedChoice(
+          value: 0,
+          label: '按回复时间',
+          subtitle: '最近有人回复的帖子在前',
+          selected: current == 0,
+        ),
+        FrostedChoice(
+          value: 1,
+          label: '按发帖时间',
+          subtitle: '新发布的帖子在前',
+          selected: current == 1,
+        ),
+      ],
+    );
+    if (picked == null || !mounted || picked == current) return;
+    await settings.setDefaultSortType(picked);
+    if (!mounted) return;
+    _reloadSection(_latestKey, sortType: picked);
+  }
+
+  Future<void> _pickSectionSort(ForumTab tab) async {
+    final state = _stateOf('$_tabKeyPrefix${tab.tabId}');
+    final picked = await showFrostedChoices<int>(
+      context,
+      title: '${tab.tabName}排序',
+      choices: [
+        for (final option in tab.sortMenu)
+          FrostedChoice(
+            value: option.sortType,
+            label: option.sortName,
+            selected: option.sortType == state.sortType,
+          ),
+      ],
+    );
+    if (picked == null || !mounted || picked == state.sortType) return;
+    _reloadSection('$_tabKeyPrefix${tab.tabId}', sortType: picked);
+  }
+
+  void _reloadSection(String key, {int? sortType}) {
+    final state = _stateOf(key)..reset();
+    if (sortType != null) state.sortType = sortType;
+    unawaited(_load(key: key, refresh: true));
   }
 
   Future<void> _handleSign() async {
@@ -169,7 +351,9 @@ class _ForumPageState extends State<ForumPage> {
       setState(() {
         _forum = _forum.copyWith(
           isSign: true,
-          curScore: _forum.curScore + (res.signBonusPoint > 0 ? res.signBonusPoint : 0),
+          curScore:
+              _forum.curScore +
+              (res.signBonusPoint > 0 ? res.signBonusPoint : 0),
           contSignNum: res.contSignNum > 0
               ? res.contSignNum
               : _forum.contSignNum + 1,
@@ -255,362 +439,276 @@ class _ForumPageState extends State<ForumPage> {
           forumName: _forum.name,
           tbs: _tbs,
         );
-        if (posted == true && mounted) unawaited(_load(refresh: true));
+        if (posted == true && mounted) unawaited(_refreshCurrent());
     }
   }
 
   Future<void> _toggleAgree(int idx) async {
+    final state = _sections[_section];
+    if (state == null || idx < 0 || idx >= state.threads.length) return;
     if (!await ensureLoggedIn(context, reason: '登录后即可点赞')) return;
     if (!mounted) return;
-    final t = _threads[idx];
-    final nextAgree = !t.agree.isAgreed;
-    setState(() => _threads[idx] = t.copyWith(agree: t.agree.toggleAgree()));
+    final thread = state.threads[idx];
+    final nextAgree = !thread.agree.isAgreed;
+    setState(
+      () => state.threads[idx] = thread.copyWith(
+        agree: thread.agree.toggleAgree(),
+      ),
+    );
     try {
       await context.read<TiebaRepo>().opAgree(
-        threadId: t.effectiveId,
-        postId: t.firstPostId,
+        threadId: thread.effectiveId,
+        postId: thread.firstPostId,
         agree: nextAgree,
         objType: 3,
       );
     } on Object catch (e) {
       if (!mounted) return;
-      setState(() => _threads[idx] = t);
+      setState(() => state.threads[idx] = thread);
       showFrostedToast(context, cleanError(e), level: BannerLevel.error);
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // 构建
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
     final scheme = context.colorScheme;
+    final state = _sections[_section];
+    final list = state?.threads ?? const <TiebaThread>[];
 
     return PrismScaffold(
       bar: const ZeroAppBar(),
       body: FrostedRefresh(
         topInset: topInset + ProfileHeaderDelegate.barHeight,
-        onRefresh: () => _load(refresh: true),
-        child: CustomScrollView(
-          controller: _scroll,
-          slivers: [
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: ProfileHeaderDelegate(
-                topInset: topInset,
-                nameLine: ProfileHeaderDelegate.nameLineOf(context),
-                title: '${_forum.name.isNotEmpty ? _forum.name : widget.forumName}吧',
-                avatarUrl: _forum.avatar,
-                // 吧没有头图，顶图区留白收窄，给下面的等级/经验腾地方。
-                coverHeight: 80,
-                headerAccessory: _forum.userLevel > 0
-                    ? _ForumLevelBar(forum: _forum)
-                    : null,
-                avatarRoundedSquare: true,
-                showBack: true,
-                onBack: () => Navigator.of(context).maybePop(),
-                actions: [
-                  (
-                    glyph: FrostedGlyphs.search,
-                    tooltip: '吧内搜索',
-                    onPressed: () => openSearch(context, forumName: _forum.name),
-                  ),
-                  (
-                    glyph: FrostedGlyphs.add,
-                    tooltip: '发帖',
-                    onPressed: () async {
-                      if (!await ensureLoggedIn(context, reason: '登录后即可发帖')) {
-                        return;
-                      }
-                      if (!context.mounted || _forum.id <= 0) return;
-                      final ok = await openComposeThread(
-                        context,
-                        forumId: _forum.id,
-                        forumName: _forum.name,
-                        tbs: _tbs,
-                      );
-                      if (ok == true && context.mounted) {
-                        unawaited(_load(refresh: true));
-                      }
-                    },
-                  ),
-                  (
-                    glyph: FrostedGlyphs.more,
-                    tooltip: '更多',
-                    onPressed: _showMoreMenu,
-                  ),
-                ],
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_forum.slogan.isNotEmpty) ...[
-                      Text(
-                        _forum.slogan,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyle.footnote
-                            .of(context)
-                            .copyWith(color: scheme.onSurfaceVariant),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            joinMeta([
-                              if (_forum.memberNum > 0)
-                                '关注 ${formatCount(_forum.memberNum)}',
-                              if (_forum.postNum > 0)
-                                '帖子 ${formatCount(_forum.postNum)}',
-                            ]),
-                            style: AppTextStyle.caption1
-                                .of(context)
-                                .copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                        ),
-                        PressScale(
-                          scale: 0.94,
-                          child: FrostedTapSurface(
-                            onPressed: _handleFollowForum,
-                            pill: true,
-                            fill: _forum.isLike
-                                ? context.surfaceLevel.next.colorOf(scheme)
-                                : scheme.primary,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 7,
-                              ),
-                              child: Text(
-                                _forum.isLike ? '已关注' : '关注',
-                                style: AppTextStyle.footnote.of(context).copyWith(
-                                  color: _forum.isLike
-                                      ? scheme.onSurface
-                                      : scheme.onPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        PressScale(
-                          scale: 0.94,
-                          child: FrostedTapSurface(
-                            onPressed: _forum.isSign || _signing
-                                ? null
-                                : _handleSign,
-                            pill: true,
-                            fill: _forum.isSign
-                                ? context.success.withValues(alpha: 0.14)
-                                : scheme.primary.withValues(alpha: 0.14),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 7,
-                              ),
-                              child: Text(
-                                _signing
-                                    ? '签到中'
-                                    : (_forum.isSign ? '已签到' : '签到'),
-                                style: AppTextStyle.footnote.of(context).copyWith(
-                                  color: _forum.isSign
-                                      ? context.success
-                                      : scheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+        onRefresh: _refreshCurrent,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragStart: (_) => _swipeDx = 0,
+          onHorizontalDragUpdate: (d) => _swipeDx += d.delta.dx,
+          onHorizontalDragEnd: (details) {
+            final width = context.size?.width ?? 0;
+            final velocity = details.primaryVelocity ?? 0;
+            final far = width > 0 && _swipeDx.abs() > width * 0.22;
+            if (!far && velocity.abs() < 320) return;
+            final step = _swipeDx != 0
+                ? (_swipeDx < 0 ? 1 : -1)
+                : (velocity < 0 ? 1 : -1);
+            _switchSectionBy(step);
+          },
+          child: CustomScrollView(
+            controller: _scroll,
+            slivers: [
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: ProfileHeaderDelegate(
+                  topInset: topInset,
+                  nameLine: ProfileHeaderDelegate.nameLineOf(context),
+                  title: '$_forumName吧',
+                  avatarUrl: _forum.avatar,
+                  // 吧没有头图，顶图区留白收窄，给下面的等级/经验腾地方。
+                  coverHeight: 80,
+                  headerAccessory: _forum.userLevel > 0
+                      ? _ForumLevelBar(forum: _forum)
+                      : null,
+                  avatarRoundedSquare: true,
+                  showBack: true,
+                  onBack: () => Navigator.of(context).maybePop(),
+                  actions: [
+                    (
+                      glyph: FrostedGlyphs.search,
+                      tooltip: '吧内搜索',
+                      onPressed: () =>
+                          openSearch(context, forumName: _forum.name),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SegmentedControl<int>(
-                            value: _sortType,
-                            onChanged: (v) {
-                              if (v == _sortType) return;
-                              setState(() {
-                                _sortType = v;
-                                _goodClassifyId = null;
-                                _threads = [];
-                                _pendingIds = [];
-                              });
-                              unawaited(_load(refresh: true));
-                            },
-                            segments: const [
-                              (0, '最新回复'),
-                              (1, '最新发布'),
-                              (-1, '精品'),
-                            ],
-                          ),
-                        ),
-                      ],
+                    (
+                      glyph: FrostedGlyphs.add,
+                      tooltip: '发帖',
+                      onPressed: () async {
+                        if (!await ensureLoggedIn(context, reason: '登录后即可发帖')) {
+                          return;
+                        }
+                        if (!context.mounted || _forum.id <= 0) return;
+                        final ok = await openComposeThread(
+                          context,
+                          forumId: _forum.id,
+                          forumName: _forum.name,
+                          tbs: _tbs,
+                        );
+                        if (ok == true && mounted) unawaited(_refreshCurrent());
+                      },
                     ),
-                    AnimatedSize(
-                      duration: context.disableAnimations
-                          ? Duration.zero
-                          : const Duration(milliseconds: 200),
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment.topCenter,
-                      child: _sortType == -1 && _forum.goodClassifies.isNotEmpty
-                          ? Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: [
-                                    for (final c in _forum.goodClassifies)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          right: 6,
-                                        ),
-                                        child: PressScale(
-                                          scale: 0.94,
-                                          child: FrostedTapSurface(
-                                            onPressed: () {
-                                              if ((_goodClassifyId ?? 0) ==
-                                                  c.id) {
-                                                return;
-                                              }
-                                              HapticFeedback.selectionClick();
-                                              setState(() {
-                                                _goodClassifyId = c.id;
-                                                _threads = [];
-                                              });
-                                              unawaited(_load(refresh: true));
-                                            },
-                                            pill: true,
-                                            fill: (_goodClassifyId ?? 0) == c.id
-                                                ? scheme.primary
-                                                : context.surfaceLevel.next
-                                                      .colorOf(scheme),
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                    vertical: 5,
-                                                  ),
-                                              child: Text(
-                                                c.name,
-                                                style: AppTextStyle.caption1
-                                                    .of(context)
-                                                    .copyWith(
-                                                      color:
-                                                          (_goodClassifyId ??
-                                                                  0) ==
-                                                              c.id
-                                                          ? scheme.onPrimary
-                                                          : scheme.onSurface,
-                                                    ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            )
-                          : const SizedBox(width: double.infinity),
+                    (
+                      glyph: FrostedGlyphs.more,
+                      tooltip: '更多',
+                      onPressed: _showMoreMenu,
                     ),
                   ],
                 ),
               ),
+              SliverToBoxAdapter(child: _buildForumInfo(context, scheme)),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _SectionStripDelegate(
+                  fill: SurfaceLevel.page.colorOf(scheme),
+                  child: CapsuleTabStrip<String>(
+                    tabs: _stripTabs,
+                    value: _section,
+                    onChanged: _switchSection,
+                  ),
+                ),
+              ),
+              if (_section == _goodKey && _forum.goodClassifies.isNotEmpty)
+                SliverToBoxAdapter(child: _buildClassifyRow(context, scheme)),
+              ..._buildListSlivers(context, state, list),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildForumInfo(BuildContext context, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_forum.slogan.isNotEmpty) ...[
+            Text(
+              _forum.slogan,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.footnote
+                  .of(context)
+                  .copyWith(color: scheme.onSurfaceVariant),
             ),
-            if (_loading && _threads.isEmpty)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 14),
-                  child: Column(
-                    children: [
-                      ThreadCardSkeleton(),
-                      SizedBox(height: 10),
-                      ThreadCardSkeleton(),
-                      SizedBox(height: 10),
-                      ThreadCardSkeleton(),
-                    ],
+            const SizedBox(height: 8),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  joinMeta([
+                    if (_forum.memberNum > 0)
+                      '关注 ${formatCount(_forum.memberNum)}',
+                    if (_forum.postNum > 0) '帖子 ${formatCount(_forum.postNum)}',
+                  ]),
+                  style: AppTextStyle.caption1
+                      .of(context)
+                      .copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ),
+              PressScale(
+                scale: 0.94,
+                child: FrostedTapSurface(
+                  onPressed: _handleFollowForum,
+                  pill: true,
+                  fill: _forum.isLike
+                      ? context.surfaceLevel.next.colorOf(scheme)
+                      : scheme.primary,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    child: Text(
+                      _forum.isLike ? '已关注' : '关注',
+                      style: AppTextStyle.footnote
+                          .of(context)
+                          .copyWith(
+                            color: _forum.isLike
+                                ? scheme.onSurface
+                                : scheme.onPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
                   ),
                 ),
-              )
-            else if (_error != null && _threads.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: FrostedEmpty(
-                  title: '加载贴吧失败',
-                  message: _error,
-                  icon: FrostedGlyphs.forum,
-                  action: FilledButton(
-                    onPressed: () => _load(refresh: true),
-                    child: const Text('重试'),
+              ),
+              const SizedBox(width: 8),
+              PressScale(
+                scale: 0.94,
+                child: FrostedTapSurface(
+                  onPressed: _forum.isSign || _signing ? null : _handleSign,
+                  pill: true,
+                  fill: _forum.isSign
+                      ? context.success.withValues(alpha: 0.14)
+                      : scheme.primary.withValues(alpha: 0.14),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    child: Text(
+                      _signing ? '签到中' : (_forum.isSign ? '已签到' : '签到'),
+                      style: AppTextStyle.footnote
+                          .of(context)
+                          .copyWith(
+                            color: _forum.isSign
+                                ? context.success
+                                : scheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
                   ),
                 ),
-              )
-            else if (_threads.isEmpty)
-              const SliverFillRemaining(
-                hasScrollBody: false,
-                child: FrostedEmpty(
-                  title: '暂无帖子',
-                  icon: FrostedGlyphs.forum,
-                ),
-              )
-            else
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  14,
-                  0,
-                  14,
-                  MediaQuery.paddingOf(context).bottom + 24,
-                ),
-                sliver: SliverList.separated(
-                  itemCount: _threads.length + (_loadingMore ? 1 : 0),
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, idx) {
-                    if (idx >= _threads.length) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: FrostedLoading(),
-                      );
-                    }
-                    final t = _threads[idx];
-                    return ThreadCard(
-                      key: ValueKey('frs-${t.effectiveId}'),
-                      thread: t,
-                      showForumBadge: false,
-                      // 置顶帖（公告、吧规一类）压成单行，别让置顶内容占掉半屏。
-                      compact: t.isTop,
-                      onTap: () => openThread(
-                        context,
-                        threadId: t.effectiveId,
-                        forumId: _forum.id,
-                        forumName: _forum.name,
-                        forumAvatar: _forum.avatar,
-                        initialTitle: t.displayTitle,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassifyRow(BuildContext context, ColorScheme scheme) {
+    final selectedId = _sections[_goodKey]?.classifyId ?? 0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final classify in _forum.goodClassifies)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: PressScale(
+                  scale: 0.94,
+                  child: FrostedTapSurface(
+                    onPressed: () {
+                      final good = _stateOf(_goodKey);
+                      if ((good.classifyId ?? 0) == classify.id) return;
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        good.classifyId = classify.id;
+                        good.reset();
+                      });
+                      unawaited(_load(key: _goodKey, refresh: true));
+                    },
+                    pill: true,
+                    fill: selectedId == classify.id
+                        ? scheme.primary
+                        : context.surfaceLevel.next.colorOf(scheme),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
                       ),
-                      onLongPress: () => showThreadContextMenu(context, t),
-                      onAuthorTap: t.author.id > 0
-                          ? () => openUserProfile(
-                              context,
-                              uid: t.author.id,
-                              portrait: t.author.portrait,
-                              initialName: t.author.displayName,
-                            )
-                          : null,
-                      onAgreeTap: () => _toggleAgree(idx),
-                      onImageTap: (imgs, i) => openImageViewer(
-                        context,
-                        images: imgs,
-                        initialIndex: i,
+                      child: Text(
+                        classify.name,
+                        style: AppTextStyle.caption1
+                            .of(context)
+                            .copyWith(
+                              color: selectedId == classify.id
+                                  ? scheme.onPrimary
+                                  : scheme.onSurface,
+                            ),
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -618,6 +716,172 @@ class _ForumPageState extends State<ForumPage> {
       ),
     );
   }
+
+  List<Widget> _buildListSlivers(
+    BuildContext context,
+    _SectionState? state,
+    List<TiebaThread> threads,
+  ) {
+    final loading = state == null || state.loading;
+    if (loading && threads.isEmpty) {
+      return const [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 14),
+            child: Column(
+              children: [
+                ThreadCardSkeleton(),
+                SizedBox(height: 10),
+                ThreadCardSkeleton(),
+                SizedBox(height: 10),
+                ThreadCardSkeleton(),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+    final error = state?.error;
+    if (error != null && threads.isEmpty) {
+      return [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: FrostedEmpty(
+            title: '加载贴吧失败',
+            message: error,
+            icon: FrostedGlyphs.forum,
+            action: FilledButton(
+              onPressed: _refreshCurrent,
+              child: const Text('重试'),
+            ),
+          ),
+        ),
+      ];
+    }
+    if (threads.isEmpty) {
+      return const [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: FrostedEmpty(title: '暂无帖子', icon: FrostedGlyphs.forum),
+        ),
+      ];
+    }
+    final loadingMore = state?.loadingMore ?? false;
+    return [
+      SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          14,
+          10,
+          14,
+          MediaQuery.paddingOf(context).bottom + 24,
+        ),
+        sliver: SliverList.separated(
+          itemCount: threads.length + (loadingMore ? 1 : 0),
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          itemBuilder: (context, idx) {
+            if (idx >= threads.length) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: FrostedLoading(),
+              );
+            }
+            final t = threads[idx];
+            return ThreadCard(
+              key: ValueKey('frs-${t.effectiveId}'),
+              thread: t,
+              showForumBadge: false,
+              // 置顶帖（公告、吧规一类）压成单行，别让置顶内容占掉半屏。
+              compact: t.isTop,
+              onTap: () => openThread(
+                context,
+                threadId: t.effectiveId,
+                forumId: _forum.id,
+                forumName: _forum.name,
+                forumAvatar: _forum.avatar,
+                initialTitle: t.displayTitle,
+              ),
+              onLongPress: () => showThreadContextMenu(context, t),
+              onAuthorTap: t.author.id > 0
+                  ? () => openUserProfile(
+                      context,
+                      uid: t.author.id,
+                      portrait: t.author.portrait,
+                      initialName: t.author.displayName,
+                    )
+                  : null,
+              onAgreeTap: () => _toggleAgree(idx),
+              onImageTap: (imgs, i) =>
+                  openImageViewer(context, images: imgs, initialIndex: i),
+            );
+          },
+        ),
+      ),
+    ];
+  }
+}
+
+/// 单个分区的列表状态：切换分区后各自保留帖子、分页游标与滚动位置。
+class _SectionState {
+  _SectionState({required this.sortType});
+
+  int sortType;
+  int? classifyId;
+  final List<TiebaThread> threads = [];
+  List<int> pending = [];
+  int page = 0;
+  int lastThreadId = 0;
+  bool hasMore = true;
+  bool loading = false;
+  bool loadingMore = false;
+  bool loaded = false;
+  String? error;
+  double offset = 0;
+
+  /// 重新拉第一页前清干净，避免新旧两份列表叠加。
+  void reset() {
+    threads.clear();
+    pending = [];
+    page = 0;
+    lastThreadId = 0;
+    hasMore = true;
+    loaded = false;
+    error = null;
+  }
+}
+
+/// 吸顶的帖子分区条：滚动时贴着折叠栏停住，随时能切分区。
+class _SectionStripDelegate extends SliverPersistentHeaderDelegate {
+  const _SectionStripDelegate({required this.child, required this.fill});
+
+  static const double _height = CapsuleTabStrip.height + 16;
+
+  final Widget child;
+  final Color fill;
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return ColoredBox(
+      color: fill,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _SectionStripDelegate old) =>
+      old.child != child || old.fill != fill;
 }
 
 /// 吧内等级与经验：等级徽标 + 等级头衔 + 经验进度条 + `当前/升级所需`。
@@ -635,7 +899,9 @@ class _ForumLevelBar extends StatelessWidget {
     final scheme = context.colorScheme;
     final goal = forum.levelUpScore;
     final hasProgress = goal > 0 && forum.curScore > 0;
-    final progress = hasProgress ? (forum.curScore / goal).clamp(0.0, 1.0) : 0.0;
+    final progress = hasProgress
+        ? (forum.curScore / goal).clamp(0.0, 1.0)
+        : 0.0;
 
     return Column(
       mainAxisSize: MainAxisSize.min,

@@ -17,6 +17,7 @@ import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/press_scale.dart';
 import '../widgets/refresh.dart';
+import '../widgets/segmented_capsule.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/swipe_pager.dart';
 import '../widgets/thread_card.dart';
@@ -378,7 +379,7 @@ class _FeedPageState extends State<FeedPage> {
         bindChrome: true,
         title: SizedBox(
           width: 228,
-          child: SegmentedControl<int>(
+          child: FrostedSegmentedControl<int>(
             value: _tab,
             onChanged: _switchTab,
             segments: const [

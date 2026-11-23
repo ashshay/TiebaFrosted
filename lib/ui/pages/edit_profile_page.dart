@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../data/models.dart';
 import '../../data/repo.dart';
 import '../widgets/common.dart';
+import '../widgets/segmented_capsule.dart';
 
 /// 编辑个人资料页（昵称、简介、性别）。
 class EditProfilePage extends StatefulWidget {
@@ -95,7 +96,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           ),
           const FrostedSectionTitle('性别'),
           FrostedCard(
-            child: SegmentedControl<int>(
+            child: FrostedSegmentedControl<int>(
               value: _sex == 2 ? 2 : 1,
               onChanged: (v) => setState(() => _sex = v),
               segments: const [

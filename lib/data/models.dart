@@ -262,6 +262,7 @@ class ForumTab {
     this.tabCode = '',
     this.isGeneralTab = false,
     this.isDefault = false,
+    this.sortMenu = const [],
   });
 
   final int tabId;
@@ -270,6 +271,9 @@ class ForumTab {
   final String tabCode;
   final bool isGeneralTab;
   final bool isDefault;
+
+  /// 分区自带的排序菜单（`FrsTabInfo.sort_menu`），空表示该分区只有一种排序。
+  final List<TiebaSortOption> sortMenu;
 }
 
 class TiebaForum {
@@ -650,6 +654,7 @@ class ForumPageResult {
     this.threads = const [],
     this.threadIds = const [],
     this.tabs = const [],
+    this.navTabs = const [],
     this.tbs = '',
   });
 
@@ -657,8 +662,41 @@ class ForumPageResult {
   final TiebaPageInfo page;
   final List<TiebaThread> threads;
   final List<int> threadIds;
+
+  /// `frs_tab_info`（老响应里的分区表）。
   final List<ForumTab> tabs;
+
+  /// `nav_tab_info.tab`（V12 响应的导航分区表，比 [tabs] 多带排序菜单）。
+  final List<ForumTab> navTabs;
   final String tbs;
+
+  /// 吧主页红框里的帖子分区：只看通用分区（`tabType == 15`），
+  /// 新版响应优先取 [navTabs]，老响应退回 [tabs]。
+  List<ForumTab> get generalTabs {
+    final source = navTabs.isNotEmpty ? navTabs : tabs;
+    return [
+      for (final tab in source)
+        if (tab.isGeneralTab && tab.tabType == 15 && tab.tabName.isNotEmpty)
+          tab,
+    ];
+  }
+}
+
+/// 单个吧内分区的一页帖子（Protobuf `generalTabList`，cmd=309622）。
+class ForumTabThreadResult {
+  const ForumTabThreadResult({
+    this.threads = const [],
+    this.hasMore = false,
+    this.lastThreadId = 0,
+    this.sortType = -1,
+  });
+
+  final List<TiebaThread> threads;
+  final bool hasMore;
+
+  /// 末条帖子的 tid，下一页用它做游标。
+  final int lastThreadId;
+  final int sortType;
 }
 
 class PersonalizedPageResult {

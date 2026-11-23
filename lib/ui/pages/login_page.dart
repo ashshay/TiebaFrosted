@@ -6,6 +6,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../data/native_channels.dart';
 import '../../data/repo.dart';
 import '../widgets/common.dart';
+import '../widgets/segmented_capsule.dart';
 
 /// 登录页：支持百度网页登录自动抓取 Cookie 与手动粘贴 Cookie/BDUSS 登录。
 class LoginPage extends StatefulWidget {
@@ -97,7 +98,7 @@ class _LoginPageState extends State<LoginPage> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-              child: SegmentedControl<int>(
+              child: FrostedSegmentedControl<int>(
                 value: _mode,
                 onChanged: (v) => setState(() => _mode = v),
                 segments: const [

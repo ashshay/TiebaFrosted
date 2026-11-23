@@ -11,6 +11,7 @@ import '../../data/store.dart';
 import '../../data/tab_cache.dart';
 import '../routes.dart';
 import '../theme.dart';
+import '../widgets/capsule_tab_strip.dart';
 import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/skeleton.dart';
@@ -116,6 +117,8 @@ class ExploreViewState extends State<ExploreView> {
       });
     }
   }
+
+  String _codeOf(ForumTab tab) => tab.tabCode.isNotEmpty ? tab.tabCode : 'all';
 
   @override
   Widget build(BuildContext context) {
@@ -283,49 +286,29 @@ class ExploreViewState extends State<ExploreView> {
                   const SizedBox(height: 16),
                 ],
                 if (tabs.isNotEmpty) ...[
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final t in tabs) ...[
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: FrostedTapSurface(
-                              onPressed: () {
-                                setState(() {
-                                  _selectedTabCode = t.tabCode.isNotEmpty
-                                      ? t.tabCode
-                                      : 'all';
-                                  _selectedTabId = '${t.tabId}';
-                                });
-                                unawaited(_load());
-                              },
-                              pill: true,
-                              fill: _selectedTabCode == t.tabCode
-                                  ? scheme.primary
-                                  : context.surfaceLevel.next.colorOf(scheme),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 7,
-                                ),
-                                child: Text(
-                                  t.tabName,
-                                  style: AppTextStyle.footnote
-                                      .of(context)
-                                      .copyWith(
-                                        color: _selectedTabCode == t.tabCode
-                                            ? scheme.onPrimary
-                                            : scheme.onSurface,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                  CapsuleTabStrip<String>(
+                    tabs: [
+                      // 接口只下发分类 tab，首页自己补一个「全部」，避免
+                      // 未选分类时滑块停在第一个分类上说了不算。
+                      const CapsuleTabItem(value: 'all', label: '全部'),
+                      for (final t in tabs)
+                        CapsuleTabItem(value: _codeOf(t), label: t.tabName),
+                    ],
+                    value: _selectedTabCode,
+                    onChanged: (code) {
+                      if (code == _selectedTabCode) return;
+                      final tab = code == 'all'
+                          ? null
+                          : tabs.firstWhere(
+                              (t) => _codeOf(t) == code,
+                              orElse: () => tabs.first,
+                            );
+                      setState(() {
+                        _selectedTabCode = code;
+                        _selectedTabId = tab == null ? '1' : '${tab.tabId}';
+                      });
+                      unawaited(_load());
+                    },
                   ),
                   const SizedBox(height: 12),
                 ],

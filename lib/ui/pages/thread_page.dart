@@ -19,6 +19,7 @@ import '../widgets/post_tile.dart';
 import '../widgets/press_scale.dart';
 import '../widgets/refresh.dart';
 import '../widgets/remote_image.dart';
+import '../widgets/segmented_capsule.dart';
 import '../widgets/skeleton.dart';
 
 /// 帖子详情页（核心）：主楼 + 楼层列表 + 只看楼主 + 排序切换 + 投票 + 收藏/点赞 + 底部回复栏。
@@ -594,7 +595,7 @@ class _ThreadPageState extends State<ThreadPage> {
                       const Spacer(),
                       SizedBox(
                         width: 176,
-                        child: SegmentedControl<int>(
+                        child: FrostedSegmentedControl<int>(
                           value: _sortType,
                           onChanged: (v) {
                             if (v == _sortType) return;

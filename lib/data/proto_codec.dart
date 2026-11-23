@@ -448,6 +448,7 @@ abstract final class TiebaProtoCodec {
     final threadIds = <int>[];
     final usersById = <int, TiebaUser>{};
     final tabs = <ForumTab>[];
+    final navTabs = <ForumTab>[];
 
     ProtoReader(data).forEachField((tag, wire, r) {
       switch (tag) {
@@ -470,8 +471,17 @@ abstract final class TiebaProtoCodec {
           final u = _decodeUser(r.readSubReader());
           if (u.id > 0) usersById[u.id] = u;
           return true;
-        case 22: // repeated FrsTabInfo
+        case 22: // repeated FrsTabInfo frs_tab_info
           tabs.add(_decodeFrsTabInfo(r.readSubReader()));
+          return true;
+        case 37: // NavTabInfo nav_tab_info { repeated FrsTabInfo tab = 1; }
+          r.readSubReader().forEachField((nt, nw, nr) {
+            if (nt == 1 && nw == WireType.lengthDelimited) {
+              navTabs.add(_decodeFrsTabInfo(nr.readSubReader()));
+              return true;
+            }
+            return false;
+          });
           return true;
         default:
           return false;
@@ -495,7 +505,109 @@ abstract final class TiebaProtoCodec {
       threads: hydrated,
       threadIds: threadIds,
       tabs: tabs,
+      navTabs: navTabs,
       tbs: tbs,
+    );
+  }
+
+  /// 吧内分区帖子流（Protobuf V12 `frs/generalTabList?cmd=309622`）。
+  ///
+  /// 老版本客户端才有这条链路：按 `FrsTabInfo` 的 `tab_id` / `tab_type` /
+  /// `sort_type` 拉取该分区的一页帖子，用于红框里的「吧友互助 / 交流专区」等分区。
+  static Uint8List encodeGeneralTabListRequest({
+    required TiebaDevice device,
+    required int forumId,
+    required ForumTab tab,
+    int sortType = -1,
+    int page = 1,
+    int lastThreadId = 0,
+    String bduss = '',
+    String stoken = '',
+    String tbs = '',
+    String zid = '',
+  }) {
+    final w = ProtoWriter();
+    w.writeMessage(
+      1,
+      encodeCommonRequest(
+        device: device,
+        clientVersion: TiebaClientVersion.v12,
+        bduss: bduss,
+        stoken: stoken,
+        tbs: tbs,
+        zid: zid,
+      ),
+    );
+    w.writeInt32(2, tab.tabId);
+    w.writeUint64(3, forumId);
+    w.writeInt32(4, page); // pn
+    w.writeInt32(5, 30); // rn
+    w.writeInt32(6, device.screenWidth);
+    w.writeInt32(7, device.screenHeight);
+    w.writeInt32(8, device.screenDensity.round());
+    w.writeUint64(9, lastThreadId, emitZero: true);
+    w.writeInt32(10, tab.isDefault ? 1 : 0); // is_default_navtab
+    w.writeString(11, tab.tabName);
+    w.writeInt32(12, tab.isGeneralTab ? 1 : 0); // is_general_tab
+    w.writeInt32(13, sortType, emitZero: true);
+    w.writeInt32(14, tab.tabType);
+    w.writeString(15, '', emitEmpty: true); // ad_ext_params
+    w.writeString(16, '', emitEmpty: true); // ad_bear_context
+    w.writeInt32(17, 0, emitZero: true); // has_ad_bear
+    w.writeString(18, '', emitEmpty: true); // ad_bear_sid
+    w.writeDouble(19, 0, emitZero: true); // ad_bear_sid_price
+    w.writeInt32(20, 0, emitZero: true); // request_times
+    w.writeString(21, '', emitEmpty: true); // frs_common_info
+    w.writeInt32(22, 1); // is_newfrs
+    w.writeInt32(23, 0, emitZero: true); // is_video_doublerow
+    return _wrapRequestData(w.toBytes());
+  }
+
+  static ForumTabThreadResult decodeGeneralTabListResponse(Uint8List rawBytes) {
+    final data = unwrapResponse(rawBytes);
+    final threads = <TiebaThread>[];
+    final usersById = <int, TiebaUser>{};
+    var hasMore = false;
+    var sortType = -1;
+
+    ProtoReader(data).forEachField((tag, wire, r) {
+      switch (tag) {
+        case 1: // repeated ThreadInfo general_list
+          threads.add(_decodeThreadInfo(r.readSubReader()));
+          return true;
+        case 2: // int32 has_more
+          hasMore = r.readInt32() != 0;
+          return true;
+        case 3: // repeated User user_list
+          final u = _decodeUser(r.readSubReader());
+          if (u.id > 0) usersById[u.id] = u;
+          return true;
+        case 7: // int32 sort_type
+          sortType = r.readInt32();
+          return true;
+        default:
+          return false;
+      }
+    });
+
+    final hydrated = <TiebaThread>[];
+    for (final t in threads) {
+      if (t.isLive) continue;
+      hydrated.add(
+        t.copyWith(
+          author: t.author.id > 0
+              ? t.author
+              : (usersById[t.authorId] ?? t.author),
+        ),
+      );
+    }
+
+    return ForumTabThreadResult(
+      threads: hydrated,
+      hasMore: hasMore,
+      // 游标用 ThreadInfo.id（tid），与 TiebaLite 的 last_thread_id 一致。
+      lastThreadId: hydrated.isEmpty ? 0 : hydrated.last.id,
+      sortType: sortType,
     );
   }
 
@@ -2412,6 +2524,7 @@ abstract final class TiebaProtoCodec {
     bool isGeneral = false;
     String tabCode = '';
     bool isDefault = false;
+    final sortMenu = <TiebaSortOption>[];
     r.forEachField((tag, wire, reader) {
       switch (tag) {
         case 1:
@@ -2432,6 +2545,10 @@ abstract final class TiebaProtoCodec {
         case 10:
           isDefault = reader.readInt32() != 0;
           return true;
+        case 19: // repeated SortButton sort_menu
+          final sort = _decodeSortButton(reader.readSubReader());
+          if (sort.sortName.isNotEmpty) sortMenu.add(sort);
+          return true;
         default:
           return false;
       }
@@ -2443,7 +2560,26 @@ abstract final class TiebaProtoCodec {
       tabCode: tabCode,
       isGeneralTab: isGeneral,
       isDefault: isDefault,
+      sortMenu: sortMenu,
     );
+  }
+
+  /// `SortButton { string text = 1; int32 source_id = 2; }`
+  static TiebaSortOption _decodeSortButton(ProtoReader r) {
+    int sortType = 0;
+    String name = '';
+    r.forEachField((tag, wire, reader) {
+      if (tag == 1) {
+        name = reader.readString();
+        return true;
+      }
+      if (tag == 2) {
+        sortType = reader.readInt32();
+        return true;
+      }
+      return false;
+    });
+    return TiebaSortOption(sortType: sortType, sortName: name);
   }
 
   static HotTopicItem _decodeRecommendTopic(ProtoReader r) {

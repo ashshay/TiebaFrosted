@@ -166,6 +166,7 @@ class TiebaRepo {
       threads: filterThreads(res.threads),
       threadIds: res.threadIds,
       tabs: res.tabs,
+      navTabs: res.navTabs,
       tbs: res.tbs,
     );
   }
@@ -185,6 +186,29 @@ class TiebaRepo {
       sortType: sortType,
     );
     return filterThreads(list);
+  }
+
+  /// 吧内分区（红框里的「吧友互助 / 交流专区」等）的一页帖子。
+  Future<ForumTabThreadResult> getForumTabThreads({
+    required int forumId,
+    required ForumTab tab,
+    int sortType = -1,
+    int page = 1,
+    int lastThreadId = 0,
+  }) async {
+    final res = await api.forumTabThreads(
+      forumId: forumId,
+      tab: tab,
+      sortType: sortType,
+      page: page,
+      lastThreadId: lastThreadId,
+    );
+    return ForumTabThreadResult(
+      threads: filterThreads(res.threads),
+      hasMore: res.hasMore,
+      lastThreadId: res.lastThreadId,
+      sortType: res.sortType,
+    );
   }
 
   Future<ForumDetailInfo> getForumDetail(int forumId) =>

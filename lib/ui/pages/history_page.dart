@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/remote_image.dart';
+import '../widgets/segmented_capsule.dart';
 
 /// 本地浏览历史页（帖子 / 贴吧分类，支持单条删除与一键清空）。
 class HistoryPage extends StatefulWidget {
@@ -72,7 +73,7 @@ class _HistoryPageState extends State<HistoryPage> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-              child: SegmentedControl<int>(
+              child: FrostedSegmentedControl<int>(
                 value: _filterType,
                 onChanged: (v) {
                   if (v == _filterType) return;

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../data/settings.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/segmented_capsule.dart';
 
 /// 外观设置页：深浅色 / 强调色（含 Monet 与色相循环）/ 4 档 ColorStyle / 3 档液态玻璃 / 字体缩放。
 class SettingsThemePage extends StatelessWidget {
@@ -69,7 +70,7 @@ class SettingsThemePage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: FrostedCard(
-              child: SegmentedControl<int>(
+              child: FrostedSegmentedControl<int>(
                 value: settings.darkMode,
                 onChanged: settings.setDarkMode,
                 segments: const [

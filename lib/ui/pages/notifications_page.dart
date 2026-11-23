@@ -15,6 +15,7 @@ import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/refresh.dart';
 import '../widgets/remote_image.dart';
+import '../widgets/segmented_capsule.dart';
 
 /// 消息通知中心：回复我的 / @我的。
 ///
@@ -274,7 +275,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
         bindChrome: true,
         title: SizedBox(
           width: 176,
-          child: SegmentedControl<int>(
+          child: FrostedSegmentedControl<int>(
             value: _tab,
             onChanged: _switchTab,
             segments: const [

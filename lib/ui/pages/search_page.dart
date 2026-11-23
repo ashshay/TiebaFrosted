@@ -12,6 +12,7 @@ import '../routes.dart';
 import '../widgets/common.dart';
 import '../widgets/forum_card.dart';
 import '../widgets/glyphs.dart';
+import '../widgets/segmented_capsule.dart';
 import 'search_forum_page.dart';
 import 'search_thread_page.dart';
 import 'search_user_page.dart';
@@ -134,7 +135,7 @@ class _SearchPageState extends State<SearchPage> {
                   if (!inForum)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-                      child: SegmentedControl<int>(
+                      child: FrostedSegmentedControl<int>(
                         value: _tab,
                         onChanged: (v) => setState(() => _tab = v),
                         segments: const [

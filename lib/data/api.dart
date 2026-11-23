@@ -500,6 +500,35 @@ class TiebaApi {
     return TiebaProtoCodec.decodeThreadListResponse(respBytes);
   }
 
+  /// 吧内分区列表（Protobuf V12 `frs/generalTabList?cmd=309622`）。
+  Future<ForumTabThreadResult> forumTabThreads({
+    required int forumId,
+    required ForumTab tab,
+    int sortType = -1,
+    int page = 1,
+    int lastThreadId = 0,
+  }) async {
+    final cred = credentialProvider();
+    final reqBytes = TiebaProtoCodec.encodeGeneralTabListRequest(
+      device: device,
+      forumId: forumId,
+      tab: tab,
+      sortType: sortType,
+      page: page,
+      lastThreadId: lastThreadId,
+      bduss: cred.bduss,
+      stoken: cred.stoken,
+      tbs: cred.tbs,
+      zid: cred.zid,
+    );
+    final respBytes = await _postProto(
+      path: '/c/f/frs/generalTabList?cmd=309622&format=protobuf',
+      protoBytes: reqBytes,
+      clientVersion: TiebaClientVersion.v12,
+    );
+    return TiebaProtoCodec.decodeGeneralTabListResponse(respBytes);
+  }
+
   /// 个性化推荐流（Protobuf V12 `excellent/personalized?cmd=309264`）。
   Future<PersonalizedPageResult> personalized({
     int loadType = 1,

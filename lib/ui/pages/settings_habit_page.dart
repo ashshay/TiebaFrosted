@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/settings.dart';
 import '../widgets/common.dart';
+import '../widgets/segmented_capsule.dart';
 
 /// 使用习惯设置页。
 class SettingsHabitPage extends StatelessWidget {
@@ -25,7 +26,7 @@ class SettingsHabitPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: FrostedCard(
-              child: SegmentedControl<int>(
+              child: FrostedSegmentedControl<int>(
                 value: settings.defaultFeedTab,
                 onChanged: settings.setDefaultFeedTab,
                 segments: const [
@@ -40,7 +41,7 @@ class SettingsHabitPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             child: FrostedCard(
-              child: SegmentedControl<int>(
+              child: FrostedSegmentedControl<int>(
                 value: settings.defaultSortType,
                 onChanged: settings.setDefaultSortType,
                 segments: const [

@@ -12,6 +12,7 @@ import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/refresh.dart';
 import '../widgets/rich_text.dart';
+import '../widgets/segmented_capsule.dart';
 
 /// TA 的帖子 / 回复列表页。
 class UserPostPage extends StatefulWidget {
@@ -110,7 +111,7 @@ class _UserPostPageState extends State<UserPostPage> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-              child: SegmentedControl<bool>(
+              child: FrostedSegmentedControl<bool>(
                 value: _isThread,
                 onChanged: (v) {
                   if (v == _isThread) return;
