@@ -44,6 +44,7 @@ class SettingsCustomPage extends StatelessWidget {
               ),
               FrostedListRow(
                 title: const Text('同时显示用户名与昵称'),
+                subtitle: const Text('昵称照常占标题行，第二行开头用 @用户名 标出贴吧 ID'),
                 trailing: Switch(
                   value: settings.showBothUsernameAndNickname,
                   onChanged: settings.setShowBothUsernameAndNickname,

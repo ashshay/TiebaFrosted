@@ -16,6 +16,7 @@ import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/profile_header.dart';
 import '../widgets/refresh.dart';
+import '../widgets/remote_image.dart';
 
 /// 「我的」主标签页：已登录使用折叠头展示个人资料与功能分组，未登录提供登录引导与本地能力入口。
 class MePage extends StatefulWidget {
@@ -91,33 +92,33 @@ class _MePageState extends State<MePage> {
         : acc.portrait;
     final uid = int.tryParse(acc.uid) ?? user?.id ?? 0;
     final topInset = MediaQuery.paddingOf(context).top;
-    final scheme = context.colorScheme;
 
     return PrismScaffold(
       bar: const ZeroAppBar(),
       body: ChromeScrollListener(
         onHiddenChanged: chrome.setHidden,
         child: FrostedRefresh(
-          topInset: topInset + ProfileHeaderDelegate.barHeight,
+          topInset: topInset + 12,
           onRefresh: _loadProfile,
-          child: CustomScrollView(
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: ProfileHeaderDelegate(
-                  topInset: topInset,
-                  nameLine: ProfileHeaderDelegate.nameLineOf(context),
-                  title: displayName,
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              14,
+              topInset + 12,
+              14,
+              pageBottomInset(context),
+            ),
+            children: [
+              // 与下面 FrostedSettingsGroup 的左右留白对齐（组内另有 14）。
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: _ProfileCard(
+                  displayName: displayName,
+                  atUserName: user?.atUserName ?? '',
+                  tbAge: user?.tbAge ?? '',
                   avatarUrl: avatar,
-                  coverUrl: user?.bgPic ?? '',
-                  showBack: false,
-                  onBack: () {},
-                  actions: [
-                    if (user != null)
-                      (
-                        glyph: FrostedGlyphs.edit,
-                        tooltip: '编辑资料',
-                        onPressed: () async {
+                  onEdit: user == null
+                      ? null
+                      : () async {
                           final changed = await openEditProfile(
                             context,
                             user: user,
@@ -126,181 +127,98 @@ class _MePageState extends State<MePage> {
                             unawaited(_loadProfile());
                           }
                         },
+                  stats: [
+                    _ProfileStat(
+                      label: '关注',
+                      value: formatCount(user?.concernNum ?? 0),
+                      onTap: () =>
+                          openFollowList(context, uid: uid, title: '我的关注'),
+                    ),
+                    _ProfileStat(
+                      label: '粉丝',
+                      value: formatCount(user?.fansNum ?? 0),
+                      onTap: () => openFollowList(
+                        context,
+                        uid: uid,
+                        isFans: true,
+                        title: '我的粉丝',
                       ),
-                    (
-                      glyph: FrostedGlyphs.wrench,
-                      tooltip: '设置',
-                      onPressed: () => openSettings(context),
+                    ),
+                    _ProfileStat(
+                      label: '贴吧',
+                      value: formatCount(user?.myLikeNum ?? 0),
+                      onTap: () =>
+                          openUserLikeForum(context, uid: uid, title: '我关注的吧'),
+                    ),
+                    _ProfileStat(
+                      label: '帖子',
+                      value: formatCount(user?.postNum ?? 0),
+                      onTap: () =>
+                          openUserPost(context, uid: uid, title: '我的帖子'),
                     ),
                   ],
                 ),
               ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: pageBottomInset(context)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (user != null && user.intro.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                          child: Text(
-                            user.intro,
-                            style: AppTextStyle.subheadline
-                                .of(context)
-                                .copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 6, 14, 4),
-                        child: FrostedCard(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              _StatButton(
-                                label: '关注',
-                                value: formatCount(user?.concernNum ?? 0),
-                                onTap: () => openFollowList(
-                                  context,
-                                  uid: uid,
-                                  title: '我的关注',
-                                ),
-                              ),
-                              _StatButton(
-                                label: '粉丝',
-                                value: formatCount(user?.fansNum ?? 0),
-                                onTap: () => openUserProfile(
-                                  context,
-                                  uid: uid,
-                                  portrait: avatar,
-                                  initialName: displayName,
-                                ),
-                              ),
-                              _StatButton(
-                                label: '贴吧',
-                                value: formatCount(user?.myLikeNum ?? 0),
-                                onTap: () => openUserLikeForum(
-                                  context,
-                                  uid: uid,
-                                  title: '我关注的吧',
-                                ),
-                              ),
-                              _StatButton(
-                                label: '帖子',
-                                value: formatCount(user?.postNum ?? 0),
-                                onTap: () => openUserPost(
-                                  context,
-                                  uid: uid,
-                                  title: '我的帖子',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (_loading)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: FrostedLoading(),
-                        ),
-                      const FrostedSectionTitle('我的内容'),
-                      FrostedSettingsGroup(
-                        children: [
-                          FrostedListRow(
-                            leading: const GlyphIcon(
-                              FrostedGlyphs.bookmark,
-                              size: 19,
-                            ),
-                            title: const Text('我的收藏'),
-                            trailing: const GlyphIcon(
-                              Glyphs.chevronForward,
-                              size: 16,
-                            ),
-                            onPressed: () => openThreadStore(context),
-                          ),
-                          FrostedListRow(
-                            leading: const GlyphIcon(
-                              FrostedGlyphs.clock,
-                              size: 19,
-                            ),
-                            title: const Text('浏览历史'),
-                            trailing: const GlyphIcon(
-                              Glyphs.chevronForward,
-                              size: 16,
-                            ),
-                            onPressed: () => openHistory(context),
-                          ),
-                          FrostedListRow(
-                            leading: const GlyphIcon(
-                              FrostedGlyphs.calendarCheck,
-                              size: 19,
-                            ),
-                            title: const Text('一键签到'),
-                            trailing: const GlyphIcon(
-                              Glyphs.chevronForward,
-                              size: 16,
-                            ),
-                            onPressed: () => openSettingsOkSign(context),
-                          ),
-                        ],
-                      ),
-                      const FrostedSectionTitle('账号与设置'),
-                      FrostedSettingsGroup(
-                        children: [
-                          FrostedListRow(
-                            leading: const GlyphIcon(
-                              FrostedGlyphs.person,
-                              size: 19,
-                            ),
-                            title: const Text('多账号管理'),
-                            subtitle: Text('已保存 ${store.accounts.length} 个账号'),
-                            trailing: const GlyphIcon(
-                              Glyphs.chevronForward,
-                              size: 16,
-                            ),
-                            onPressed: () => openSettingsAccount(context),
-                          ),
-                          FrostedListRow(
-                            leading: const GlyphIcon(
-                              FrostedGlyphs.palette,
-                              size: 19,
-                            ),
-                            title: const Text('外观与液态玻璃'),
-                            trailing: const GlyphIcon(
-                              Glyphs.chevronForward,
-                              size: 16,
-                            ),
-                            onPressed: () => openSettingsTheme(context),
-                          ),
-                          FrostedListRow(
-                            leading: const GlyphIcon(
-                              FrostedGlyphs.shield,
-                              size: 19,
-                            ),
-                            title: const Text('屏蔽规则'),
-                            trailing: const GlyphIcon(
-                              Glyphs.chevronForward,
-                              size: 16,
-                            ),
-                            onPressed: () => openSettingsBlock(context),
-                          ),
-                          FrostedListRow(
-                            leading: const GlyphIcon(
-                              FrostedGlyphs.wrench,
-                              size: 19,
-                            ),
-                            title: const Text('全部设置'),
-                            trailing: const GlyphIcon(
-                              Glyphs.chevronForward,
-                              size: 16,
-                            ),
-                            onPressed: () => openSettings(context),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: FrostedLoading(),
                 ),
+              const FrostedSectionTitle('我的内容'),
+              FrostedSettingsGroup(
+                children: [
+                  FrostedListRow(
+                    leading: const GlyphIcon(FrostedGlyphs.bookmark, size: 19),
+                    title: const Text('我的收藏'),
+                    trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
+                    onPressed: () => openThreadStore(context),
+                  ),
+                  FrostedListRow(
+                    leading: const GlyphIcon(FrostedGlyphs.clock, size: 19),
+                    title: const Text('浏览历史'),
+                    trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
+                    onPressed: () => openHistory(context),
+                  ),
+                  FrostedListRow(
+                    leading: const GlyphIcon(
+                      FrostedGlyphs.calendarCheck,
+                      size: 19,
+                    ),
+                    title: const Text('一键签到'),
+                    trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
+                    onPressed: () => openSettingsOkSign(context),
+                  ),
+                ],
+              ),
+              const FrostedSectionTitle('账号与设置'),
+              FrostedSettingsGroup(
+                children: [
+                  FrostedListRow(
+                    leading: const GlyphIcon(FrostedGlyphs.person, size: 19),
+                    title: const Text('多账号管理'),
+                    subtitle: Text('已保存 ${store.accounts.length} 个账号'),
+                    trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
+                    onPressed: () => openSettingsAccount(context),
+                  ),
+                  FrostedListRow(
+                    leading: const GlyphIcon(FrostedGlyphs.palette, size: 19),
+                    title: const Text('外观与液态玻璃'),
+                    trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
+                    onPressed: () => openSettingsTheme(context),
+                  ),
+                  FrostedListRow(
+                    leading: const GlyphIcon(FrostedGlyphs.shield, size: 19),
+                    title: const Text('屏蔽规则'),
+                    trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
+                    onPressed: () => openSettingsBlock(context),
+                  ),
+                  FrostedListRow(
+                    leading: const GlyphIcon(FrostedGlyphs.wrench, size: 19),
+                    title: const Text('全部设置'),
+                    trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
+                    onPressed: () => openSettings(context),
+                  ),
+                ],
               ),
             ],
           ),
@@ -308,6 +226,141 @@ class _MePageState extends State<MePage> {
       ),
     );
   }
+}
+
+/// 主页头部的「液态玻璃」一体化名片：头像、昵称、@用户名、吧龄与四项计数。
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({
+    required this.displayName,
+    required this.atUserName,
+    required this.tbAge,
+    required this.avatarUrl,
+    required this.stats,
+    this.onEdit,
+  });
+
+  final String displayName;
+  final String atUserName;
+  final String tbAge;
+  final String avatarUrl;
+  final List<_ProfileStat> stats;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    final age = tbAge.trim();
+    final ageText = age.isEmpty ? '' : (age.endsWith('年') ? age : '$age年');
+
+    return FrostedCard(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Avatar(url: avatarUrl, size: 64),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyle.title3
+                          .of(context)
+                          .copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        if (atUserName.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
+                            decoration: ShapeDecoration(
+                              color: scheme.surfaceContainerHigh,
+                              shape: AppShape.full,
+                            ),
+                            child: Text(
+                              atUserName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyle.caption1
+                                  .of(context)
+                                  .copyWith(color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+                        if (ageText.isNotEmpty)
+                          Flexible(
+                            child: Text(
+                              '吧龄 $ageText',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyle.caption1
+                                  .of(context)
+                                  .copyWith(color: scheme.onSurfaceVariant),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (onEdit != null) ...[
+                const SizedBox(width: 8),
+                FrostedTapSurface(
+                  onPressed: onEdit,
+                  pill: true,
+                  fill: scheme.surfaceContainerHigh,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: GlyphIcon(
+                      FrostedGlyphs.edit,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(height: 1, thickness: 1),
+          Row(
+            children: [
+              for (final stat in stats)
+                Expanded(
+                  child: _StatButton(
+                    label: stat.label,
+                    value: stat.value,
+                    onTap: stat.onTap,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileStat {
+  const _ProfileStat({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
 }
 
 class _StatButton extends StatelessWidget {

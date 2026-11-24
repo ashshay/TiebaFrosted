@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -48,6 +49,7 @@ class _ForumPageState extends State<ForumPage> {
   String _tbs = '';
   String _section = _latestKey;
   bool _signing = false;
+  bool _refreshing = false;
   double _swipeDx = 0;
 
   String get _forumName =>
@@ -247,7 +249,17 @@ class _ForumPageState extends State<ForumPage> {
     unawaited(_load(key: _section, refresh: true));
   }
 
-  Future<void> _refreshCurrent() => _load(key: _section, refresh: true);
+  /// 下拉刷新、失败重试与右下角按钮共用；上一次没回来时再点直接丢弃，
+  /// 否则两次请求会各自入列、把列表刷新成两份游标。
+  Future<void> _refreshCurrent() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await _load(key: _section, refresh: true);
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // 分区切换 / 排序菜单
@@ -406,6 +418,7 @@ class _ForumPageState extends State<ForumPage> {
       choices: const [
         FrostedChoice(value: 'detail', label: '吧资料'),
         FrostedChoice(value: 'rule', label: '吧规'),
+        FrostedChoice(value: 'bawu', label: '吧务管理'),
         FrostedChoice(value: 'search', label: '吧内搜索'),
         FrostedChoice(value: 'compose', label: '发新帖'),
       ],
@@ -428,6 +441,8 @@ class _ForumPageState extends State<ForumPage> {
             forumName: _forum.name,
           );
         }
+      case 'bawu':
+        await openBawuConsole(context, _forumName);
       case 'search':
         await openSearch(context, forumName: _forum.name);
       case 'compose':
@@ -475,97 +490,120 @@ class _ForumPageState extends State<ForumPage> {
 
   @override
   Widget build(BuildContext context) {
+    final state = _sections[_section];
+    return PrismScaffold(
+      bar: const ZeroAppBar(),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          _buildScrollBody(context),
+          Positioned(
+            right: 16,
+            bottom: MediaQuery.paddingOf(context).bottom + 24,
+            child: _ForumRefreshButton(
+              refreshing: _refreshing || (state?.loading ?? false),
+              onPressed: _refreshCurrent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScrollBody(BuildContext context) {
     final topInset = MediaQuery.paddingOf(context).top;
     final scheme = context.colorScheme;
     final state = _sections[_section];
     final list = state?.threads ?? const <TiebaThread>[];
 
-    return PrismScaffold(
-      bar: const ZeroAppBar(),
-      body: FrostedRefresh(
-        topInset: topInset + ProfileHeaderDelegate.barHeight,
-        onRefresh: _refreshCurrent,
-        child: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onHorizontalDragStart: (_) => _swipeDx = 0,
-          onHorizontalDragUpdate: (d) => _swipeDx += d.delta.dx,
-          onHorizontalDragEnd: (details) {
-            final width = context.size?.width ?? 0;
-            final velocity = details.primaryVelocity ?? 0;
-            final far = width > 0 && _swipeDx.abs() > width * 0.22;
-            if (!far && velocity.abs() < 320) return;
-            final step = _swipeDx != 0
-                ? (_swipeDx < 0 ? 1 : -1)
-                : (velocity < 0 ? 1 : -1);
-            _switchSectionBy(step);
-          },
-          child: CustomScrollView(
-            controller: _scroll,
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: ProfileHeaderDelegate(
-                  topInset: topInset,
-                  nameLine: ProfileHeaderDelegate.nameLineOf(context),
-                  title: '$_forumName吧',
-                  avatarUrl: _forum.avatar,
-                  // 吧没有头图，顶图区留白收窄，给下面的等级/经验腾地方。
-                  coverHeight: 80,
-                  headerAccessory: _forum.userLevel > 0
-                      ? _ForumLevelBar(forum: _forum)
-                      : null,
-                  avatarRoundedSquare: true,
-                  showBack: true,
-                  onBack: () => Navigator.of(context).maybePop(),
-                  actions: [
-                    (
-                      glyph: FrostedGlyphs.search,
-                      tooltip: '吧内搜索',
-                      onPressed: () =>
-                          openSearch(context, forumName: _forum.name),
-                    ),
-                    (
-                      glyph: FrostedGlyphs.add,
-                      tooltip: '发帖',
-                      onPressed: () async {
-                        if (!await ensureLoggedIn(context, reason: '登录后即可发帖')) {
-                          return;
-                        }
-                        if (!context.mounted || _forum.id <= 0) return;
-                        final ok = await openComposeThread(
-                          context,
-                          forumId: _forum.id,
-                          forumName: _forum.name,
-                          tbs: _tbs,
-                        );
-                        if (ok == true && mounted) unawaited(_refreshCurrent());
-                      },
-                    ),
-                    (
-                      glyph: FrostedGlyphs.more,
-                      tooltip: '更多',
-                      onPressed: _showMoreMenu,
-                    ),
-                  ],
-                ),
-              ),
-              SliverToBoxAdapter(child: _buildForumInfo(context, scheme)),
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _SectionStripDelegate(
-                  fill: SurfaceLevel.page.colorOf(scheme),
-                  child: CapsuleTabStrip<String>(
-                    tabs: _stripTabs,
-                    value: _section,
-                    onChanged: _switchSection,
+    return FrostedRefresh(
+      topInset: topInset + ProfileHeaderDelegate.barHeight,
+      onRefresh: _refreshCurrent,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: (_) => _swipeDx = 0,
+        onHorizontalDragUpdate: (d) => _swipeDx += d.delta.dx,
+        onHorizontalDragEnd: (details) {
+          final width = context.size?.width ?? 0;
+          final velocity = details.primaryVelocity ?? 0;
+          final far = width > 0 && _swipeDx.abs() > width * 0.22;
+          if (!far && velocity.abs() < 320) return;
+          final step = _swipeDx != 0
+              ? (_swipeDx < 0 ? 1 : -1)
+              : (velocity < 0 ? 1 : -1);
+          _switchSectionBy(step);
+        },
+        child: CustomScrollView(
+          controller: _scroll,
+          slivers: [
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: ProfileHeaderDelegate(
+                topInset: topInset,
+                nameLine: ProfileHeaderDelegate.nameLineOf(context),
+                title: '$_forumName吧',
+                avatarUrl: _forum.avatar,
+                // 吧没有头图，顶图区留白收窄，给下面的等级/经验腾地方。
+                coverHeight: 80,
+                headerAccessory: _forum.userLevel > 0
+                    ? _ForumLevelBar(forum: _forum)
+                    : null,
+                avatarRoundedSquare: true,
+                showBack: true,
+                onBack: () => Navigator.of(context).maybePop(),
+                actions: [
+                  (
+                    glyph: FrostedGlyphs.search,
+                    tooltip: '吧内搜索',
+                    onPressed: () =>
+                        openSearch(context, forumName: _forum.name),
                   ),
+                  (
+                    glyph: FrostedGlyphs.add,
+                    tooltip: '发帖',
+                    onPressed: () async {
+                      if (!await ensureLoggedIn(
+                        context,
+                        reason: '登录后即可发帖',
+                      )) {
+                        return;
+                      }
+                      if (!context.mounted || _forum.id <= 0) return;
+                      final ok = await openComposeThread(
+                        context,
+                        forumId: _forum.id,
+                        forumName: _forum.name,
+                        tbs: _tbs,
+                      );
+                      if (ok == true && mounted) {
+                        unawaited(_refreshCurrent());
+                      }
+                    },
+                  ),
+                  (
+                    glyph: FrostedGlyphs.more,
+                    tooltip: '更多',
+                    onPressed: _showMoreMenu,
+                  ),
+                ],
+              ),
+            ),
+            SliverToBoxAdapter(child: _buildForumInfo(context, scheme)),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _SectionStripDelegate(
+                fill: SurfaceLevel.page.colorOf(scheme),
+                child: CapsuleTabStrip<String>(
+                  tabs: _stripTabs,
+                  value: _section,
+                  onChanged: _switchSection,
                 ),
               ),
-              if (_section == _goodKey && _forum.goodClassifies.isNotEmpty)
-                SliverToBoxAdapter(child: _buildClassifyRow(context, scheme)),
-              ..._buildListSlivers(context, state, list),
-            ],
-          ),
+            ),
+            if (_section == _goodKey && _forum.goodClassifies.isNotEmpty)
+              SliverToBoxAdapter(child: _buildClassifyRow(context, scheme)),
+            ..._buildListSlivers(context, state, list),
+          ],
         ),
       ),
     );
@@ -773,7 +811,8 @@ class _ForumPageState extends State<ForumPage> {
           14,
           10,
           14,
-          MediaQuery.paddingOf(context).bottom + 24,
+          // 给右下角悬浮刷新留出位置，别让它压住最后一张卡片的操作栏。
+          MediaQuery.paddingOf(context).bottom + 24 + _ForumRefreshButton.size,
         ),
         sliver: SliverList.separated(
           itemCount: threads.length + (loadingMore ? 1 : 0),
@@ -800,7 +839,11 @@ class _ForumPageState extends State<ForumPage> {
                 forumAvatar: _forum.avatar,
                 initialTitle: t.displayTitle,
               ),
-              onLongPress: () => showThreadContextMenu(context, t),
+              onLongPress: () async {
+                if (await showThreadContextMenu(context, t)) {
+                  unawaited(_load(key: _section, refresh: true));
+                }
+              },
               onAuthorTap: t.author.id > 0
                   ? () => openUserProfile(
                       context,
@@ -817,6 +860,58 @@ class _ForumPageState extends State<ForumPage> {
         ),
       ),
     ];
+  }
+}
+
+/// 吧主页右下角的悬浮刷新：列表看深了不必先滚回顶部再下拉。
+class _ForumRefreshButton extends StatelessWidget {
+  const _ForumRefreshButton({
+    required this.refreshing,
+    required this.onPressed,
+  });
+
+  static const double size = 46;
+
+  final bool refreshing;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.colorScheme;
+    return Semantics(
+      button: true,
+      label: '刷新',
+      child: PressScale(
+        scale: 0.92,
+        enabled: !refreshing,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: refreshing
+              ? null
+              : () {
+                  HapticFeedback.lightImpact();
+                  onPressed();
+                },
+          child: Container(
+            width: size,
+            height: size,
+            alignment: Alignment.center,
+            decoration: ShapeDecoration(
+              color: SurfaceLevel.floatingOf(scheme).colorOf(scheme),
+              shadows: dockShadows(scheme),
+              shape: AppShape.full,
+            ),
+            child: refreshing
+                ? const ActivityIndicator(size: 18)
+                : GlyphIcon(
+                    FrostedGlyphs.refresh,
+                    size: 20,
+                    color: scheme.onSurface,
+                  ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

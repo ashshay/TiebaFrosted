@@ -175,6 +175,7 @@ abstract final class TiebaProtoCodec {
     String stoken = '',
     String tbs = '',
     String zid = '',
+    int jumpFloorNum = 0,
   }) {
     final w = ProtoWriter();
     w.writeInt32(2, mark ? 1 : 0, emitZero: true); // mark
@@ -191,6 +192,12 @@ abstract final class TiebaProtoCodec {
     w.writeDouble(16, device.screenDensity);
     w.writeInt32(17, 2); // q_type
     w.writeInt32(18, page); // pn
+    // pid 在 pb/page 里是「从这条之后开始」的游标，不是定位；要定位到某楼
+    // 必须用 is_jumpfloor + jumpfloor_num。
+    if (jumpFloorNum > 0) {
+      w.writeInt32(34, 1, emitZero: true); // is_jumpfloor
+      w.writeInt32(35, jumpFloorNum, emitZero: true); // jumpfloor_num
+    }
     if (stType.isNotEmpty) w.writeString(19, stType);
     w.writeMessage(
       25,
@@ -1005,7 +1012,9 @@ abstract final class TiebaProtoCodec {
         device: device,
         clientVersion: TiebaClientVersion.v12,
         bduss: bduss,
-        stoken: stoken,
+        // 「回复」列表带上 stoken 服务端就回落到「视频」页签、只回空列表，
+        // 帖子列表则相反，必须带 stoken 才是本人的帖。
+        stoken: isThread ? stoken : '',
         tbs: tbs,
         zid: zid,
       ),

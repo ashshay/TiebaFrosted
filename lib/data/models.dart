@@ -65,6 +65,15 @@ class TiebaUser {
   String get displayName =>
       nameShow.isNotEmpty ? nameShow : (name.isNotEmpty ? name : '贴吧用户');
 
+  /// 用户名（贴吧 ID），带 `@` 前缀；没有用户名时是空串。
+  ///
+  /// 展示规则：昵称单独占标题行，用户名以 `@用户名 · 6楼 · 时间` 的形式
+  /// 排在第二行（见「同时显示用户名与昵称」开关）。
+  String get atUserName {
+    final user = name.trim();
+    return user.isEmpty ? '' : '@$user';
+  }
+
   TiebaUser copyWith({
     bool? hasConcerned,
     int? fansNum,

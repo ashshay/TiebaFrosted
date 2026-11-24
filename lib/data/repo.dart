@@ -324,6 +324,7 @@ class TiebaRepo {
     int forumId = 0,
     int lastPid = 0,
     bool mark = false,
+    int jumpFloorNum = 0,
   }) async {
     final res = await api.pbPage(
       threadId: threadId,
@@ -335,6 +336,7 @@ class TiebaRepo {
       forumId: forumId,
       lastPid: lastPid,
       mark: mark,
+      jumpFloorNum: jumpFloorNum,
     );
     if (page == 1 && res.thread.effectiveId > 0) {
       store.recordThreadHistory(
@@ -467,13 +469,36 @@ class TiebaRepo {
     required int threadId,
     required int postId,
     bool isFloor = false,
+    bool mine = true,
+    String? tbsOverride,
   }) => api.deletePost(
     forumId: forumId,
     forumName: forumName,
     threadId: threadId,
     postId: postId,
     isFloor: isFloor,
+    mine: mine,
+    tbsOverride: tbsOverride,
   );
+
+  Future<void> deleteThread({
+    required int forumId,
+    required String forumName,
+    required int threadId,
+    bool mine = true,
+    bool hide = false,
+    String? tbsOverride,
+  }) => api.deleteThread(
+    forumId: forumId,
+    forumName: forumName,
+    threadId: threadId,
+    mine: mine,
+    hide: hide,
+    tbsOverride: tbsOverride,
+  );
+
+  Future<String> reportUrl({required int postId}) =>
+      api.reportUrl(postId: postId);
 
   // ---- User & Social ----
 
@@ -501,7 +526,10 @@ class TiebaRepo {
   Future<({List<TiebaUser> items, bool hasMore})> getFollowList({
     int? uid,
     int page = 1,
-  }) => api.followList(uid: uid, page: page);
+    bool isFans = false,
+  }) => isFans
+      ? api.fansList(uid: uid, page: page)
+      : api.followList(uid: uid, page: page);
 
   Future<void> toggleFollowUser({
     required String portrait,

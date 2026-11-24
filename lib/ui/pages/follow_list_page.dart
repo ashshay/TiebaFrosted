@@ -12,12 +12,20 @@ import '../widgets/glyphs.dart';
 import '../widgets/refresh.dart';
 import '../widgets/user_list.dart';
 
-/// 关注列表页。
+/// 关注 / 粉丝列表页。
 class FollowListPage extends StatefulWidget {
-  const FollowListPage({super.key, this.uid, this.title = '关注列表'});
+  const FollowListPage({
+    super.key,
+    this.uid,
+    this.title = '关注列表',
+    this.isFans = false,
+  });
 
   final int? uid;
   final String title;
+
+  /// true 时拉粉丝列表（`/c/u/fans/page`），否则拉关注列表。
+  final bool isFans;
 
   @override
   State<FollowListPage> createState() => _FollowListPageState();
@@ -71,6 +79,7 @@ class _FollowListPageState extends State<FollowListPage> {
       final res = await context.read<TiebaRepo>().getFollowList(
         uid: widget.uid,
         page: nextPage,
+        isFans: widget.isFans,
       );
       if (!mounted) return;
       setState(() {
@@ -98,7 +107,9 @@ class _FollowListPageState extends State<FollowListPage> {
         topInset: pageTopInset(context),
         onRefresh: () => _load(refresh: true),
         child: _loading && _users.isEmpty
-            ? const FrostedLoading(label: '加载关注列表...')
+            ? FrostedLoading(
+                label: widget.isFans ? '加载粉丝列表...' : '加载关注列表...',
+              )
             : _error != null && _users.isEmpty
                 ? FrostedEmpty(
                     title: '加载失败',
@@ -110,8 +121,8 @@ class _FollowListPageState extends State<FollowListPage> {
                     ),
                   )
                 : _users.isEmpty
-                    ? const FrostedEmpty(
-                        title: '暂无关注的用户',
+                    ? FrostedEmpty(
+                        title: widget.isFans ? '还没有粉丝' : '暂无关注的用户',
                         icon: FrostedGlyphs.follow,
                       )
                     : ListView.separated(

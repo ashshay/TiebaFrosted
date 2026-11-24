@@ -344,7 +344,11 @@ class ExploreViewState extends State<ExploreView> {
                     forumName: t.forumName,
                     initialTitle: t.displayTitle,
                   ),
-                  onLongPress: () => showThreadContextMenu(context, t),
+                  onLongPress: () async {
+                    if (await showThreadContextMenu(context, t)) {
+                      unawaited(_load());
+                    }
+                  },
                   onCommentTap: () => openThread(
                     context,
                     threadId: t.effectiveId,

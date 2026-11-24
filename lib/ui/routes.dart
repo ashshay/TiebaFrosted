@@ -79,6 +79,18 @@ Future<void> openForumRule(
   ForumRulePage(forumId: forumId, forumName: forumName),
 );
 
+/// 打开官方吧务后台（删帖、封禁、申诉都在里面）。非吧务打开会被网站提示无权限。
+Future<void> openBawuConsole(BuildContext context, String forumName) {
+  final name = forumName.trim();
+  if (name.isEmpty) return Future.value();
+  return openWeb(
+    context,
+    'https://tieba.baidu.com/bawu2/platform/index'
+    '?word=${Uri.encodeQueryComponent(name)}',
+    title: '$name吧 · 吧务管理',
+  );
+}
+
 Future<void> openThread(
   BuildContext context, {
   required int threadId,
@@ -211,7 +223,11 @@ Future<void> openFollowList(
   BuildContext context, {
   int? uid,
   String title = '关注列表',
-}) => pushPage(context, FollowListPage(uid: uid, title: title));
+  bool isFans = false,
+}) => pushPage(
+  context,
+  FollowListPage(uid: uid, title: title, isFans: isFans),
+);
 
 Future<void> openUserPost(
   BuildContext context, {
@@ -346,16 +362,29 @@ Future<void> openExternalUrl(BuildContext context, String url) async {
   }
 }
 
-/// 帖子卡片长按快捷操作菜单。
-Future<void> showThreadContextMenu(
+/// 帖子卡片长按快捷操作菜单。返回 true 表示列表里的这条帖子已被删除。
+Future<bool> showThreadContextMenu(
   BuildContext context,
   TiebaThread thread,
 ) async {
+  final store = context.read<FrostedStore>();
+  final repo = context.read<TiebaRepo>();
+  final myUid = int.tryParse(store.uid) ?? 0;
+  final mine =
+      myUid > 0 &&
+      (thread.authorId == myUid || thread.author.id == myUid);
   final choices = <FrostedChoice<String>>[
     const FrostedChoice(value: 'copy_link', label: '复制帖子链接'),
     const FrostedChoice(value: 'share', label: '分享帖子'),
     if (thread.forumName.isNotEmpty)
       FrostedChoice(value: 'open_forum', label: '进入 ${thread.forumName}吧'),
+    const FrostedChoice(value: 'report_thread', label: '举报帖子'),
+    if (mine)
+      const FrostedChoice(
+        value: 'delete_thread',
+        label: '删除我的帖子',
+        destructive: true,
+      ),
     if (thread.author.id > 0)
       FrostedChoice(
         value: 'block_user',
@@ -374,7 +403,7 @@ Future<void> showThreadContextMenu(
     title: thread.displayTitle.isNotEmpty ? thread.displayTitle : '帖子操作',
     choices: choices,
   );
-  if (picked == null || !context.mounted) return;
+  if (picked == null || !context.mounted) return false;
   final url = 'https://tieba.baidu.com/p/${thread.effectiveId}';
   switch (picked) {
     case 'copy_link':
@@ -387,8 +416,55 @@ Future<void> showThreadContextMenu(
       );
     case 'open_forum':
       await openForum(context, thread.forumName);
+    case 'report_thread':
+      if (thread.firstPostId <= 0) {
+        if (context.mounted) {
+          showFrostedToast(
+            context,
+            '需要先打开帖子才能举报',
+            level: BannerLevel.error,
+          );
+        }
+        return false;
+      }
+      try {
+        final reportUrl = await repo.reportUrl(postId: thread.firstPostId);
+        if (!context.mounted) return false;
+        if (reportUrl.isEmpty) {
+          showFrostedToast(context, '举报页暂不可用', level: BannerLevel.error);
+          return false;
+        }
+        await openWeb(context, reportUrl, title: '举报');
+      } on Object catch (e) {
+        if (context.mounted) {
+          showFrostedToast(context, cleanError(e), level: BannerLevel.error);
+        }
+      }
+    case 'delete_thread':
+      final ok = await showFrostedConfirm(
+        context,
+        title: '删除主题帖？',
+        message: '删除后无法恢复',
+        confirmText: '删除',
+        destructive: true,
+      );
+      if (ok != true || !context.mounted) return false;
+      try {
+        await repo.deleteThread(
+          forumId: thread.forumId,
+          forumName: thread.forumName,
+          threadId: thread.effectiveId,
+          mine: true,
+        );
+        if (context.mounted) showFrostedToast(context, '已删除');
+        return true;
+      } on Object catch (e) {
+        if (context.mounted) {
+          showFrostedToast(context, cleanError(e), level: BannerLevel.error);
+        }
+      }
     case 'block_user':
-      await context.read<FrostedStore>().addBlockRule(
+      await store.addBlockRule(
         type: BlockRuleType.user,
         value: thread.author.displayName,
       );
@@ -400,7 +476,7 @@ Future<void> showThreadContextMenu(
         );
       }
     case 'block_forum':
-      await context.read<FrostedStore>().addBlockRule(
+      await store.addBlockRule(
         type: BlockRuleType.forum,
         value: thread.forumName,
       );
@@ -412,6 +488,7 @@ Future<void> showThreadContextMenu(
         );
       }
   }
+  return false;
 }
 
 /// 辅助检查登录态，未登录时引导前往登录页。

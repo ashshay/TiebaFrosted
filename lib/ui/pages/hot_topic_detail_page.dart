@@ -74,18 +74,34 @@ class _HotTopicDetailPageState extends State<HotTopicDetailPage> {
     }
     try {
       final nextPage = refresh ? 1 : _page + 1;
+      // 服务端只在 pn>1 且带 last_id 时才下发第二批讨论，只给 pn 会返回空列表。
+      final lastId = refresh || _threads.isEmpty
+          ? ''
+          : '${_threads.last.effectiveId}';
       final res = await context.read<TiebaRepo>().getHotTopicDetail(
         topicId: widget.topicId,
         topicName: widget.topicName,
         page: nextPage,
         offset: refresh ? 0 : _threads.length,
+        lastId: lastId,
       );
       if (!mounted) return;
+      final seen = refresh
+          ? <int>{}
+          : {for (final t in _threads) t.effectiveId};
+      final added = [
+        for (final t in res.threads)
+          if (seen.add(t.effectiveId)) t,
+      ];
       setState(() {
-        _detail = res;
-        _threads = refresh ? res.threads : [..._threads, ...res.threads];
+        // 翻页响应缺 topic_info 时保留首屏的话题资料，别把简介和讨论数清空。
+        if (refresh || res.topicDesc.isNotEmpty || res.discussNum > 0) {
+          _detail = res;
+        }
+        _threads = refresh ? added : [..._threads, ...added];
         _page = nextPage;
-        _hasMore = res.hasMore && res.threads.isNotEmpty;
+        // 没有新帖子就停，避免同一批数据被反复追加。
+        _hasMore = res.hasMore && added.isNotEmpty;
         _loading = false;
         _loadingMore = false;
       });
@@ -185,6 +201,11 @@ class _HotTopicDetailPageState extends State<HotTopicDetailPage> {
                             ),
                             onForumTap: () =>
                                 openForum(context, _threads[i].forumName),
+                            onImageTap: (images, index) => openImageViewer(
+                              context,
+                              images: images,
+                              initialIndex: index,
+                            ),
                             onCommentTap: () => openThread(
                               context,
                               threadId: _threads[i].effectiveId,

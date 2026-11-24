@@ -51,7 +51,7 @@
       <div>
         <p class="badge">
           <span class="dot" aria-hidden="true"></span>
-          最新版本 <strong>v1.02</strong> · build 3
+          最新版本 <strong>v1.1.2</strong> · build 9
         </p>
         <h1>贴吧客户端，<br><span>液态玻璃与跟手手感</span>。</h1>
         <p class="hero-lead">
@@ -63,7 +63,7 @@
         <div class="hero-actions">
           <a class="btn btn--primary" href="https://github.com/ashshay/TiebaFrosted/releases/latest">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
-            下载 v1.02
+            下载 v1.1.2
           </a>
           <a class="btn btn--ghost" href="https://github.com/ashshay/TiebaFrosted">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 .5C5.73.5.99 5.24.99 11.5c0 4.86 3.15 8.98 7.52 10.44.55.1.75-.24.75-.53v-1.86c-3.06.67-3.7-1.47-3.7-1.47-.5-1.27-1.23-1.61-1.23-1.61-1-.68.08-.67.08-.67 1.11.08 1.7 1.14 1.7 1.14.99 1.69 2.6 1.2 3.23.92.1-.72.39-1.2.7-1.48-2.44-.28-5.01-1.22-5.01-5.45 0-1.2.43-2.19 1.14-2.96-.12-.28-.5-1.4.1-2.92 0 0 .93-.3 3.05 1.13a10.5 10.5 0 0 1 2.77-.37c.94 0 1.89.13 2.78.37 2.11-1.43 3.04-1.13 3.04-1.13.6 1.52.22 2.64.11 2.92.71.77 1.14 1.76 1.14 2.96 0 4.24-2.58 5.17-5.03 5.44.4.34.75 1.01.75 2.04v3.02c0 .3.2.64.76.53a11.01 11.01 0 0 0 7.51-10.44C23.01 5.24 18.27.5 12 .5Z"/></svg>
@@ -229,6 +229,19 @@
         <p>按版本记录主要改动。</p>
       </div>
       <ul class="log">
+        <li>
+          <h3>v1.1.2 <span>2026-11-24</span></h3>
+          <ul>
+            <li>热议榜话题详情的讨论列表修复：解包 <code>thread_info</code>，标题、作者、吧名、配图与计数恢复显示，并支持按 <code>last_id</code> 翻页</li>
+            <li>「我的帖子 → 回复」修复：请求不再携带 <code>stoken</code>，避免服务端回落到视频页签返回空列表</li>
+            <li>回复消息跳转到对应楼层，跳到的楼层上方提供「点击加载之前的楼层」</li>
+            <li>个人页去掉头图，改为一体化名片（头像、昵称、@用户名、吧龄、四项计数）</li>
+            <li>新增「同时显示用户名与昵称」开关：昵称占标题行，第二行以 <code>@用户名</code> 开头</li>
+            <li>个人主页新增粉丝列表；吧首页新增右下角悬浮刷新按钮</li>
+            <li>新增删帖、举报与吧务入口（吧务后台）；发现页「进吧」按钮改为胶囊</li>
+            <li>设置页新增赞赏码，并注明赞赏为自愿赠予</li>
+          </ul>
+        </li>
         <li>
           <h3>v1.02 <span>2026-11-23</span></h3>
           <ul>

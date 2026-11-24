@@ -56,6 +56,8 @@ class ThreadCard extends StatelessWidget {
         abstractText.isNotEmpty &&
         abstractText != title;
     final metaParts = <String>[
+      // 昵称占标题行，用户名以 @ 形式排在时间前面。
+      if (settings.showBothUsernameAndNickname) thread.author.atUserName,
       if (thread.createTime > 0)
         formatTiebaTime(thread.createTime)
       else if (thread.lastTimeInt > 0)
@@ -172,7 +174,9 @@ class ThreadCard extends StatelessWidget {
                   FrostedTapSurface(
                     onPressed: onForumTap,
                     pill: true,
-                    fill: context.surfaceLevel.next.colorOf(scheme),
+                    // 卡片本身已经是 next 层级，用同色填充等于看不见；
+                    // 这里给它一层更亮的胶囊底，明确是「进吧」按钮。
+                    fill: scheme.surfaceContainerHigh,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,

@@ -59,7 +59,12 @@ class PostTile extends StatelessWidget {
     final settings = context.watch<FrostedSettings>();
     final scheme = context.colorScheme;
     final isLz = lzUserId > 0 && post.author.id == lzUserId;
+    final showUsername = context.select<FrostedSettings, bool>(
+      (s) => s.showBothUsernameAndNickname,
+    );
     final meta = joinMeta([
+      // 昵称占标题行，用户名以 @ 形式排在第二行最前。
+      if (showUsername) post.author.atUserName,
       if (post.floor > 0) '${post.floor}楼',
       if (post.time > 0) formatTiebaTime(post.time),
       if (post.author.ipAddress.isNotEmpty) post.author.ipAddress,
@@ -330,6 +335,9 @@ class _SubPostPreviewLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.colorScheme;
+    final showUsername = context.select<FrostedSettings, bool>(
+      (s) => s.showBothUsernameAndNickname,
+    );
     final style = AppTextStyle.subheadline
         .of(context)
         .copyWith(color: scheme.onSurface);
@@ -386,6 +394,13 @@ class _SubPostPreviewLine extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
+          if (showUsername && sub.author.atUserName.isNotEmpty)
+            TextSpan(
+              text: ' ${sub.author.atUserName}',
+              style: AppTextStyle.caption1
+                  .of(context)
+                  .copyWith(color: scheme.onSurfaceVariant),
+            ),
           if (lzUserId > 0 && sub.author.id == lzUserId)
             TextSpan(
               text: ' [楼主]',

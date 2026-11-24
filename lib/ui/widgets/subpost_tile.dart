@@ -2,9 +2,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/html_text.dart';
 import '../../data/models.dart';
+import '../../data/settings.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'glyphs.dart';
@@ -39,6 +41,9 @@ class SubPostTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.colorScheme;
     final isLz = lzUserId > 0 && subPost.author.id == lzUserId;
+    final showUsername = context.select<FrostedSettings, bool>(
+      (s) => s.showBothUsernameAndNickname,
+    );
 
     return FrostedCard(
       onPressed: onReplyTap,
@@ -99,7 +104,10 @@ class SubPostTile extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      formatTiebaTime(subPost.time),
+                      joinMeta([
+                        if (showUsername) subPost.author.atUserName,
+                        if (subPost.time > 0) formatTiebaTime(subPost.time),
+                      ]),
                       style: AppTextStyle.footnote
                           .of(context)
                           .copyWith(color: scheme.onSurfaceVariant),

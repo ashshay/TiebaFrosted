@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/icons/icons.dart';
+import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/settings.dart';
@@ -52,6 +53,18 @@ class SettingsPage extends StatelessWidget {
                 subtitle: const Text('无图模式、隐藏回复、双昵称显示'),
                 trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
                 onPressed: () => openSettingsCustom(context),
+              ),
+              FrostedListRow(
+                leading: const GlyphIcon(FrostedGlyphs.person, size: 19),
+                title: const Text('同时显示用户名与昵称'),
+                subtitle: const Text('第二行开头显示 @用户名，昵称仍占标题行'),
+                trailing: Switch(
+                  value: settings.showBothUsernameAndNickname,
+                  onChanged: settings.setShowBothUsernameAndNickname,
+                ),
+                onPressed: () => settings.setShowBothUsernameAndNickname(
+                  !settings.showBothUsernameAndNickname,
+                ),
               ),
             ],
           ),
@@ -110,6 +123,76 @@ class SettingsPage extends StatelessWidget {
                 onPressed: () => openAbout(context),
               ),
             ],
+          ),
+          const FrostedSectionTitle('支持'),
+          FrostedSettingsGroup(
+            children: [
+              FrostedListRow(
+                leading: const GlyphIcon(FrostedGlyphs.like, size: 19),
+                title: const Text('捐赠'),
+                subtitle: const Text('赞赏码 · 完全自愿的赠予，感谢支持'),
+                trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
+                onPressed: () => showFloatingDialog<void>(
+                  context: context,
+                  child: const _DonationDialog(),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 赞赏码弹窗：微信扫一扫即可赞赏，并注明捐赠是自愿赠予。
+class _DonationDialog extends StatelessWidget {
+  const _DonationDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: '赞赏码',
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 240),
+            child: Semantics(
+              image: true,
+              label: '赞赏码',
+              child: ClipRSuperellipse(
+                borderRadius: BorderRadius.circular(18),
+                child: Image.asset(
+                  'assets/donate/donate_qr.png',
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.medium,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '微信扫一扫，感谢支持',
+            textAlign: TextAlign.center,
+            style: AppTextStyle.caption1
+                .of(context)
+                .copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '赞赏完全出于自愿，属于对作者的无偿赠予，不换取任何服务或权益。',
+            textAlign: TextAlign.center,
+            style: AppTextStyle.caption2
+                .of(context)
+                .copyWith(color: scheme.onSurfaceVariant),
           ),
         ],
       ),

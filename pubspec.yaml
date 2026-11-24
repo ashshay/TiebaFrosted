@@ -2,7 +2,7 @@ name: tieba_frosted
 description: "TiebaFrosted — 贴吧客户端，prism_ui 设计语言，Flutter 实现。"
 publish_to: 'none'
 
-version: 1.0.2+3
+version: 1.1.2+9
 
 environment:
   sdk: ^3.10.0
@@ -34,3 +34,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: false
+  assets:
+    # 设置 → 捐赠 里的赞赏码。
+    - assets/donate/donate_qr.png

@@ -24,3 +24,7 @@ TiebaFrosted 作为 TiebaLite 的衍生作品并静态链接了 `prism_ui`，整
 ## 图标路径
 
 - `lib/ui/widgets/glyphs.dart` 中的矢量路径基于 Material Icons（Apache-2.0）。
+
+## 图片资源
+
+- `assets/donate/donate_qr.png`：设置页「捐赠」里的赞赏码，仓库作者自备（与 Hobo 项目同款）。

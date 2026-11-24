@@ -241,8 +241,29 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _Metric('关注', formatCount(_user.concernNum)),
-                          _Metric('粉丝', formatCount(_user.fansNum)),
+                          _Metric(
+                            '关注',
+                            formatCount(_user.concernNum),
+                            onTap: _user.id > 0
+                                ? () => openFollowList(
+                                    context,
+                                    uid: _user.id,
+                                    title: '${_user.displayName}的关注',
+                                  )
+                                : null,
+                          ),
+                          _Metric(
+                            '粉丝',
+                            formatCount(_user.fansNum),
+                            onTap: _user.id > 0
+                                ? () => openFollowList(
+                                    context,
+                                    uid: _user.id,
+                                    isFans: true,
+                                    title: '${_user.displayName}的粉丝',
+                                  )
+                                : null,
+                          ),
                           _Metric('获赞', formatCount(_user.totalAgreeNum)),
                           _Metric('贴吧', formatCount(_user.myLikeNum)),
                         ],
@@ -298,6 +319,23 @@ class _UserProfilePageState extends State<UserProfilePage> {
                               context,
                               uid: _user.id,
                               title: '${_user.displayName}的关注',
+                            ),
+                          ),
+                          FrostedListRow(
+                            leading: const GlyphIcon(
+                              FrostedGlyphs.person,
+                              size: 19,
+                            ),
+                            title: const Text('TA 的粉丝'),
+                            trailing: const GlyphIcon(
+                              Glyphs.chevronForward,
+                              size: 16,
+                            ),
+                            onPressed: () => openFollowList(
+                              context,
+                              uid: _user.id,
+                              isFans: true,
+                              title: '${_user.displayName}的粉丝',
                             ),
                           ),
                         ],
@@ -387,14 +425,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric(this.label, this.value);
+  const _Metric(this.label, this.value, {this.onTap});
 
   final String label;
   final String value;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final content = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
@@ -411,6 +450,19 @@ class _Metric extends StatelessWidget {
               .copyWith(color: context.colorScheme.onSurfaceVariant),
         ),
       ],
+    );
+    if (onTap == null) return content;
+    return Semantics(
+      button: true,
+      label: label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: content,
+        ),
+      ),
     );
   }
 }

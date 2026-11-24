@@ -100,6 +100,18 @@ class _UserPostPageState extends State<UserPostPage> {
     }
   }
 
+  /// 回复条目下发的标题是「回复：<原帖标题>」，列表里只留原帖标题本身。
+  String _displayTitle(UserPostItem item) {
+    var title = item.title.trim();
+    for (final prefix in const ['回复：', '回复:']) {
+      if (title.startsWith(prefix)) {
+        title = title.substring(prefix.length).trim();
+        break;
+      }
+    }
+    return title;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = context.colorScheme;
@@ -169,6 +181,7 @@ class _UserPostPageState extends State<UserPostPage> {
                                     );
                                   }
                                   final item = _items[idx];
+                                  final title = _displayTitle(item);
                                   return FrostedCard(
                                     onPressed: () => openThread(
                                       context,
@@ -178,15 +191,17 @@ class _UserPostPageState extends State<UserPostPage> {
                                       postId: item.postId > 0
                                           ? item.postId
                                           : null,
-                                      initialTitle: item.title,
+                                      initialTitle: title,
                                     ),
                                     child: Column(
+                                      // 卡片内容比卡片窄时 CardSurface 会把它居中，
+                                      // 短标题的回复会歪到中间；拉满宽度靠左排。
                                       crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                          CrossAxisAlignment.stretch,
                                       children: [
                                         Text(
-                                          item.title.isNotEmpty
-                                              ? item.title
+                                          title.isNotEmpty
+                                              ? title
                                               : item.abstractText,
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
@@ -197,8 +212,7 @@ class _UserPostPageState extends State<UserPostPage> {
                                               ),
                                         ),
                                         if (item.abstractText.isNotEmpty &&
-                                            item.abstractText !=
-                                                item.title) ...[
+                                            item.abstractText != title) ...[
                                           const SizedBox(height: 6),
                                           Text(
                                             item.abstractText,

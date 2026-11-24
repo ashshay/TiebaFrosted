@@ -499,7 +499,11 @@ class _FeedPageState extends State<FeedPage> {
             forumAvatar: t.forumAvatar,
             initialTitle: t.displayTitle,
           ),
-          onLongPress: () => showThreadContextMenu(context, t),
+          onLongPress: () async {
+            if (await showThreadContextMenu(context, t)) {
+              unawaited(_refreshCurrentTab());
+            }
+          },
           onForumTap: () => openForum(context, t.forumName),
           onAuthorTap: t.author.id > 0
               ? () => openUserProfile(
@@ -593,7 +597,11 @@ class _FeedPageState extends State<FeedPage> {
             forumAvatar: t.forumAvatar,
             initialTitle: t.displayTitle,
           ),
-          onLongPress: () => showThreadContextMenu(context, t),
+          onLongPress: () async {
+            if (await showThreadContextMenu(context, t)) {
+              unawaited(_refreshCurrentTab());
+            }
+          },
           onForumTap: () => openForum(context, t.forumName),
           onAuthorTap: t.author.id > 0
               ? () => openUserProfile(

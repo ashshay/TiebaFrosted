@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 
 import '../core/device.dart';
+import '../core/html_text.dart';
 import '../core/signer.dart';
 import 'json.dart';
 import 'models.dart';
@@ -386,6 +387,7 @@ class TiebaApi {
     int forumId = 0,
     int lastPid = 0,
     bool mark = false,
+    int jumpFloorNum = 0,
   }) async {
     final cred = credentialProvider();
     final reqBytes = TiebaProtoCodec.encodePbPageRequest(
@@ -403,6 +405,7 @@ class TiebaApi {
       stoken: cred.stoken,
       tbs: cred.tbs,
       zid: cred.zid,
+      jumpFloorNum: jumpFloorNum,
     );
     final respBytes = await _postProto(
       path: '/c/f/pb/page?cmd=302001&format=protobuf',
@@ -637,36 +640,7 @@ class TiebaApi {
       },
       includeAuthParams: false,
     );
-    final data = j.obj('data') ?? j;
-    final info = data.obj('topic_info');
-    final relate = data.obj('relate_thread');
-    final list = relate?.objList('thread_list') ?? const [];
-    final threads = [
-      for (final item in list)
-        TiebaThread(
-          id: item.intOf('tid', item.intOf('thread_id')),
-          threadId: item.intOf('tid', item.intOf('thread_id')),
-          title: item.str('title'),
-          abstractText: item.str('abstract'),
-          forumId: item.intOf('forum_id'),
-          forumName: item.str('forum_name'),
-          replyNum: item.count('reply_num'),
-          agree: TiebaAgree(agreeNum: item.count('agree_num')),
-          createTime: item.intOf('create_time'),
-          author: item.obj('author') != null
-              ? TiebaUser.fromJson(item.obj('author')!)
-              : const TiebaUser(),
-        ),
-    ];
-    return HotTopicDetailResult(
-      topicId: info?.intOf('topic_id', topicId) ?? topicId,
-      topicName: info?.str('topic_name', topicName) ?? topicName,
-      topicDesc: info?.str('topic_desc') ?? '',
-      topicImage: info?.str('topic_image') ?? '',
-      discussNum: info?.count('discuss_num') ?? 0,
-      threads: threads,
-      hasMore: relate?.boolean('has_more') ?? false,
-    );
+    return parseHotTopicDetail(j, topicId: topicId, topicName: topicName);
   }
 
   /// 用户资料（Protobuf V12 `user/profile?cmd=303012&format=protobuf`）。
@@ -717,6 +691,9 @@ class TiebaApi {
       path: '/c/u/feed/userpost?cmd=303002&format=protobuf',
       protoBytes: reqBytes,
       clientVersion: TiebaClientVersion.v12,
+      // 「回复」列表只要请求里带 stoken（proto 与 multipart 两处任一），
+      // 服务端就回落到「视频」页签、下发空列表；见 encodeUserPostRequest。
+      needStokenPart: isThread,
     );
     return TiebaProtoCodec.decodeUserPostResponse(respBytes);
   }
@@ -989,22 +966,37 @@ class TiebaApi {
     );
   }
 
-  /// 获取关注/粉丝列表。
+  /// 获取关注列表。
   Future<({List<TiebaUser> items, bool hasMore})> followList({
     int? uid,
     int page = 1,
   }) async {
-    final j = await _postOfficialJson(
-      '/c/u/follow/followList',
-      {
-        'pn': '$page',
-        if (uid != null && uid > 0) 'uid': '$uid',
-      },
-    );
+    final j = await _postOfficialJson('/c/u/follow/followList', {
+      'pn': '$page',
+      if (uid != null && uid > 0) 'uid': '$uid',
+    });
     final raw = j.objList('follow_list');
     return (
       items: [for (final item in raw) TiebaUser.fromJson(item)],
       hasMore: j.intOf('has_more') != 0,
+    );
+  }
+
+  /// 获取粉丝列表。贴吧客户端的粉丝页是 `/c/u/fans/page`，
+  /// 返回 `user_list` 与 `page.has_more`（与关注列表的 `follow_list` 不同）。
+  Future<({List<TiebaUser> items, bool hasMore})> fansList({
+    int? uid,
+    int page = 1,
+  }) async {
+    final j = await _postOfficialJson('/c/u/fans/page', {
+      'pn': '$page',
+      if (uid != null && uid > 0) 'uid': '$uid',
+    });
+    final raw = j.objList('user_list');
+    final pageInfo = j.obj('page');
+    return (
+      items: [for (final item in raw) TiebaUser.fromJson(item)],
+      hasMore: (pageInfo?.intOf('has_more') ?? j.intOf('has_more')) != 0,
     );
   }
 
@@ -1361,13 +1353,18 @@ class TiebaApi {
     TiebaProtoCodec.unwrapResponse(respBytes);
   }
 
-  /// 删帖 / 删楼层。
+  /// 删楼层：作者本人删自己的回复，吧务删任意楼层，都走这个接口。
+  ///
+  /// [mine] 为 false 表示删的是别人的楼层（吧务操作），服务端据此走
+  /// `is_vipdel` 分支并要求吧务权限。
   Future<void> deletePost({
     required int forumId,
     required String forumName,
     required int threadId,
     required int postId,
     bool isFloor = false,
+    bool mine = true,
+    String? tbsOverride,
   }) async {
     final cred = credentialProvider();
     await _postOfficialJson('/c/c/bawu/delpost', {
@@ -1377,10 +1374,44 @@ class TiebaApi {
       'pid': '$postId',
       'isfloor': isFloor ? '1' : '0',
       'src': isFloor ? '3' : '1',
-      'is_vipdel': '0',
-      'delete_my_post': '1',
-      'tbs': cred.tbs,
+      'is_vipdel': mine ? '0' : '1',
+      'delete_my_post': mine ? '1' : '0',
+      'tbs': tbsOverride ?? cred.tbs,
     });
+  }
+
+  /// 删主题帖（作者本人或吧务）。
+  Future<void> deleteThread({
+    required int forumId,
+    required String forumName,
+    required int threadId,
+    bool mine = true,
+    bool hide = false,
+    String? tbsOverride,
+  }) async {
+    final cred = credentialProvider();
+    await _postOfficialJson('/c/c/bawu/delthread', {
+      'fid': '$forumId',
+      'word': forumName,
+      'z': '$threadId',
+      'src': '1',
+      'is_vipdel': '0',
+      'delete_my_thread': mine ? '1' : '0',
+      'is_frs_mask': hide ? '1' : '0',
+      'tbs': tbsOverride ?? cred.tbs,
+    });
+  }
+
+  /// 举报页地址：拿楼层 pid 换官方举报页 URL（`/c/f/ueg/checkjubao`）。
+  Future<String> reportUrl({required int postId}) async {
+    final cred = credentialProvider();
+    final j = await _postOfficialJson('/c/f/ueg/checkjubao', {
+      'category': '1',
+      'pid': '$postId',
+      'stoken': cred.stoken,
+    });
+    final data = j.obj('data');
+    return data?.str('url') ?? j.str('url');
   }
 
   /// 分片上传图片（与 TiebaLite `ImageUploader` 协议一致，单分片 512KB）。
@@ -1599,4 +1630,141 @@ class TiebaApi {
     }
     return map;
   }
+}
+
+/// 解析话题详情响应。
+///
+/// `relate_thread.thread_list` 的每一条都把帖子包在 `thread_info` 里
+/// （外面只多一层 `feed_id` / `source` / `user_agree`），字段直接读外层会
+/// 全部落到默认值——标题空、作者空、吧名空，卡片就成了「（无标题）」。
+/// 老结构曾经直接平铺，所以这里两层都认。抽成纯函数便于单测。
+HotTopicDetailResult parseHotTopicDetail(
+  Map<String, dynamic> raw, {
+  int topicId = 0,
+  String topicName = '',
+}) {
+  final data = jObj(raw['data']) ?? raw;
+  final info = _jsonFirstObject(data['topic_info']);
+  final relate = jObj(data['relate_thread']);
+  final threads = <TiebaThread>[];
+  for (final item in relate?.objList('thread_list') ?? const []) {
+    final body = jObj(item['thread_info']) ?? item;
+    final thread = _topicThreadFromJson(body);
+    if (thread.effectiveId > 0) threads.add(thread);
+  }
+  final name = info?.str('topic_name') ?? '';
+  return HotTopicDetailResult(
+    topicId: info?.intOf('topic_id', topicId) ?? topicId,
+    topicName: name.isNotEmpty ? name : topicName,
+    topicDesc: info?.str('topic_desc') ?? '',
+    topicImage: info?.str('topic_image') ?? '',
+    discussNum: info?.count('discuss_num') ?? 0,
+    threads: threads,
+    hasMore: jBool(data['has_more']) || jBool(relate?['has_more']),
+  );
+}
+
+/// `topic_info` 正常是对象，话题不存在时是空数组，这里统一取第一个对象。
+Map<String, dynamic>? _jsonFirstObject(Object? raw) {
+  final direct = jObj(raw);
+  if (direct != null) return direct.isEmpty ? null : direct;
+  for (final item in jArr(raw) ?? const []) {
+    final m = jObj(item);
+    if (m != null && m.isNotEmpty) return m;
+  }
+  return null;
+}
+
+TiebaThread _topicThreadFromJson(Map<String, dynamic> j) {
+  final tid = j.intOf('tid', j.intOf('thread_id', j.intOf('id')));
+  final author = j.obj('author');
+  final agree = j.obj('agree');
+  return TiebaThread(
+    id: j.intOf('id', tid),
+    threadId: tid,
+    title: j.str('title'),
+    abstractText: j.str('abstract'),
+    richAbstract: _topicRichNodes(j),
+    images: _topicImages(j),
+    author: author == null ? const TiebaUser() : TiebaUser.fromJson(author),
+    authorId: j.intOf('user_id', author == null ? 0 : jInt(author['id'])),
+    forumId: j.intOf('forum_id'),
+    forumName: j.str('forum_name'),
+    forumAvatar: j.str('avatar'),
+    replyNum: j.count('reply_num'),
+    shareNum: j.count('share_num'),
+    viewNum: j.count('view_num'),
+    agree: TiebaAgree(
+      agreeNum: agree?.count('agree_num') ?? j.count('agree_num'),
+      disagreeNum: agree?.count('disagree_num') ?? 0,
+      diffAgreeNum: agree?.count('diff_agree_num') ?? 0,
+      hasAgree: agree?.intOf('has_agree') ?? j.intOf('user_agree'),
+      agreeType: agree?.intOf('agree_type') ?? 0,
+    ),
+    createTime: j.intOf('create_time'),
+    lastTimeInt: j.intOf('last_time_int'),
+    lastTimeStr: j.str('last_time'),
+    firstPostId: j.intOf('first_post_id'),
+  );
+}
+
+/// 讨论配图：优先 `media`，没有时退回 `rich_abstract` 里的图片节点。
+List<RichImageNode> _topicImages(Map<String, dynamic> j) {
+  final images = <RichImageNode>[];
+  for (final raw in jArr(j['media']) ?? const []) {
+    final m = jObj(raw);
+    if (m == null) continue;
+    final type = m.str('type');
+    if (type.isNotEmpty && type != 'pic') continue;
+    final small = m.str('small_pic');
+    final big = m.str('big_pic', m.str('water_pic', small));
+    final url = small.isNotEmpty ? small : big;
+    if (url.isEmpty) continue;
+    final (w, h) = parseBsize(m.str('bsize'));
+    images.add(
+      RichImageNode(
+        url: url,
+        originUrl: big.isEmpty ? url : big,
+        width: w > 0 ? w : m.intOf('width'),
+        height: h > 0 ? h : m.intOf('height'),
+      ),
+    );
+  }
+  if (images.isNotEmpty) return images;
+  for (final raw in jArr(j['rich_abstract']) ?? const []) {
+    final m = jObj(raw);
+    if (m == null || m.intOf('type') != 3) continue;
+    final src = m.str('src');
+    if (src.isEmpty) continue;
+    final (w, h) = parseBsize(m.str('bsize'));
+    images.add(
+      RichImageNode(
+        url: src,
+        originUrl: m.str('origin_src', src),
+        width: w,
+        height: h,
+        originSize: m.intOf('size'),
+      ),
+    );
+  }
+  return images;
+}
+
+/// `rich_abstract` 的纯文本部分，供 [TiebaThread.displayTitle] 兜底。
+List<TiebaRichNode> _topicRichNodes(Map<String, dynamic> j) {
+  final nodes = <TiebaRichNode>[];
+  for (final raw in jArr(j['rich_abstract']) ?? const []) {
+    final m = jObj(raw);
+    if (m == null) continue;
+    final type = m.intOf('type');
+    if (type == 3) continue; // 图片交给 images
+    if (type == 2) {
+      final name = m.str('c');
+      if (name.isNotEmpty) nodes.add(RichTextNode('[$name]'));
+      continue;
+    }
+    final text = m.str('text');
+    if (text.isNotEmpty) nodes.add(RichTextNode(text));
+  }
+  return nodes;
 }
