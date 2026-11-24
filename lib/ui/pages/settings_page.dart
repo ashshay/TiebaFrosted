@@ -5,9 +5,11 @@ import 'package:provider/provider.dart';
 
 import '../../data/settings.dart';
 import '../../data/store.dart';
+import '../../data/updater.dart';
 import '../routes.dart';
 import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
+import '../widgets/update_dialog.dart';
 
 /// 设置总入口页（prism 分组列表）。
 class SettingsPage extends StatelessWidget {
@@ -17,6 +19,8 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = context.watch<FrostedSettings>();
     final store = context.watch<FrostedStore>();
+    final updater = context.watch<FrostedUpdater>();
+    final scheme = Theme.of(context).colorScheme;
 
     final themeSummary = switch (settings.darkMode) {
       1 => '浅色',
@@ -116,6 +120,23 @@ class SettingsPage extends StatelessWidget {
                 onPressed: () => openSettingsMore(context),
               ),
               FrostedListRow(
+                leading: const GlyphIcon(FrostedGlyphs.download, size: 19),
+                title: const Text('检查更新'),
+                subtitle: Text(
+                  updater.checking
+                      ? '正在检查…'
+                      : updater.hasUpdate
+                      ? '发现新版本 v${updater.latest!.version}'
+                      : updater.currentVersion.isEmpty
+                      ? '从 GitHub Releases 获取最新版本'
+                      : '当前版本 v${updater.currentVersion}',
+                ),
+                trailing: updater.hasUpdate
+                    ? FrostedTag(label: '新', color: scheme.error)
+                    : const GlyphIcon(Glyphs.chevronForward, size: 16),
+                onPressed: () => _checkForUpdate(context),
+              ),
+              FrostedListRow(
                 leading: const GlyphIcon(FrostedGlyphs.info, size: 19),
                 title: const Text('关于 TiebaFrosted'),
                 subtitle: const Text('版本信息与 GPL-3.0 开源许可'),
@@ -142,6 +163,36 @@ class SettingsPage extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// 手动检查更新：有新版就弹说明，点「去更新」打开 Release 页（或 APK 直链）。
+Future<void> _checkForUpdate(BuildContext context) async {
+  final updater = context.read<FrostedUpdater>();
+  await updater.check(force: true);
+  if (!context.mounted) return;
+
+  final info = updater.latest;
+  if (info == null) {
+    if (updater.error != null) {
+      showFrostedToast(context, updater.error!, level: BannerLevel.error);
+    } else {
+      final version = updater.currentVersion;
+      showFrostedToast(
+        context,
+        version.isEmpty ? '已经是最新版本' : '已经是最新版本 v$version',
+      );
+    }
+    return;
+  }
+
+  final go = await showUpdateDialog(
+    context,
+    info,
+    currentVersion: updater.currentVersion,
+  );
+  if (go == true && context.mounted) {
+    await openWeb(context, info.downloadUrl, title: '下载 v${info.version}');
   }
 }
 

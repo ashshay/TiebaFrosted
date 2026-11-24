@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../data/native_channels.dart';
 import '../data/settings.dart';
 import '../data/store.dart';
+import '../data/updater.dart';
 import 'chrome.dart';
 import 'pages/feed_page.dart';
 import 'pages/home_page.dart';
@@ -45,11 +46,27 @@ class _FrostedShellState extends State<FrostedShell> {
     _index = context.read<FrostedSettings>().startTab;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_handleInitialDeepLink());
+      unawaited(_notifyUpdateIfAny());
     });
     // 冷启动走 initialLink，热启动走这条流；两者都交给同一个分发器。
     _deepLinkSub = NativeChannels.deepLinks().listen((link) {
       if (mounted) unawaited(openTiebaUrl(context, link));
     });
+  }
+
+  /// 冷启动静默检查一次更新；有新版本就弹一条横幅（同一版本只提醒一次）。
+  Future<void> _notifyUpdateIfAny() async {
+    final updater = context.read<FrostedUpdater>();
+    await updater.check();
+    if (!mounted || !updater.hasUpdate || !updater.shouldNotify) return;
+    final info = updater.latest!;
+    await updater.markNotified();
+    if (!mounted) return;
+    showFrostedToast(
+      context,
+      '发现新版本 v${info.version}，可在「设置 → 检查更新」里查看',
+      level: BannerLevel.info,
+    );
   }
 
   Future<void> _handleInitialDeepLink() async {

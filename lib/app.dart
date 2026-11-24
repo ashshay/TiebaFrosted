@@ -10,6 +10,7 @@ import 'data/media_saver.dart';
 import 'data/repo.dart';
 import 'data/settings.dart';
 import 'data/store.dart';
+import 'data/updater.dart';
 import 'ui/chrome.dart';
 import 'ui/localizations.dart';
 import 'ui/shell.dart';
@@ -38,6 +39,7 @@ class TiebaFrostedApp extends StatefulWidget {
     required this.db,
     required this.mediaSaver,
     required this.repo,
+    required this.updater,
   });
 
   final FrostedSettings settings;
@@ -45,6 +47,7 @@ class TiebaFrostedApp extends StatefulWidget {
   final LocalDb db;
   final MediaSaver mediaSaver;
   final TiebaRepo repo;
+  final FrostedUpdater updater;
 
   @override
   State<TiebaFrostedApp> createState() => _TiebaFrostedAppState();
@@ -138,6 +141,7 @@ class _TiebaFrostedAppState extends State<TiebaFrostedApp> {
         Provider<TiebaRepo>.value(value: widget.repo),
         ChangeNotifierProvider<FrostedSettings>.value(value: widget.settings),
         ChangeNotifierProvider<FrostedStore>.value(value: widget.store),
+        ChangeNotifierProvider<FrostedUpdater>.value(value: widget.updater),
         ChangeNotifierProvider<ChromeController>(
           create: (_) => ChromeController(),
         ),

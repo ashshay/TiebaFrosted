@@ -12,6 +12,7 @@ import 'data/media_saver.dart';
 import 'data/repo.dart';
 import 'data/settings.dart';
 import 'data/store.dart';
+import 'data/updater.dart';
 
 class _PrefsDeviceKv implements DeviceKvStore {
   _PrefsDeviceKv(this._prefs);
@@ -66,6 +67,9 @@ Future<void> main() async {
   );
   unawaited(repo.syncDevice());
 
+  final updater = FrostedUpdater(prefs);
+  unawaited(updater.loadCurrentVersion());
+
   runApp(
     TiebaFrostedApp(
       settings: settings,
@@ -73,6 +77,7 @@ Future<void> main() async {
       db: db,
       mediaSaver: mediaSaver,
       repo: repo,
+      updater: updater,
     ),
   );
 }

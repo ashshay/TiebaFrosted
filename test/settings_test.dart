@@ -14,6 +14,7 @@ import 'package:tieba_frosted/data/media_saver.dart';
 import 'package:tieba_frosted/data/repo.dart';
 import 'package:tieba_frosted/data/settings.dart';
 import 'package:tieba_frosted/data/store.dart';
+import 'package:tieba_frosted/data/updater.dart';
 import 'package:tieba_frosted/ui/routes.dart';
 import 'package:tieba_frosted/ui/theme.dart';
 
@@ -57,6 +58,7 @@ void main() {
         db: db,
         mediaSaver: MediaSaver(api.rawDio),
         repo: repo,
+        updater: FrostedUpdater(prefs),
       ),
     );
     await tester.pumpAndSettle();
