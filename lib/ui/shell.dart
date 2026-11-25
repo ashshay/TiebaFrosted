@@ -254,7 +254,7 @@ class _FrostedShellState extends State<FrostedShell> {
                       ? Duration.zero
                       : const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
-                  child: AnimatedOpacity(
+                  child: AnimatedLiquidGlassFade(
                     opacity: hidden ? 0 : 1,
                     duration: disabled
                         ? Duration.zero
@@ -293,7 +293,10 @@ class _FrostedShellState extends State<FrostedShell> {
                   ],
                   selectedIndex: _index,
                   onSelected: _onDockSelected,
-                  tintSelection: false,
+                  tintSelection:
+                      settings.liquidGlass != LiquidGlassLevel.off &&
+                      settings.dockGlassStyle == DockGlassPreset.crystal,
+                  glassStyle: settings.navigationDockGlassStyle,
                 ),
               ),
             ),

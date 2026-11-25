@@ -16,6 +16,7 @@ import '../data/settings.dart';
 import '../data/store.dart';
 import 'nav.dart';
 import 'pages/about_page.dart';
+import 'pages/dock_glass_settings_page.dart';
 import 'pages/edit_profile_page.dart';
 import 'pages/follow_list_page.dart';
 import 'pages/forum_detail_page.dart';
@@ -297,6 +298,9 @@ Future<void> openSettings(BuildContext context) =>
 
 Future<void> openSettingsTheme(BuildContext context) =>
     pushPage(context, const SettingsThemePage());
+
+Future<void> openDockGlassSettings(BuildContext context) =>
+    pushPage(context, const DockGlassSettingsPage(), dragBack: false);
 
 Future<void> openSettingsAccount(BuildContext context) =>
     pushPage(context, const SettingsAccountPage());

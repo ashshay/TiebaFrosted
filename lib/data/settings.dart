@@ -8,6 +8,35 @@ const int accentHueCycle = -1;
 /// 液态玻璃档位（关 / 标准 / 超高）。
 enum LiquidGlassLevel { off, standard, ultra }
 
+/// 清透液态玻璃底栏默认参数（0% 磨砂 + 100% 折射）。
+const double defaultDockFrostAmount = 0.0;
+const double defaultDockRefractionAmount = 1.0;
+
+/// 将底栏磨砂/折射比例规范到 `[0.0, 1.0]` 并消除浮点尾差。
+double normalizeDockGlassAmount(double value) {
+  if (!value.isFinite) return 0.0;
+  final clamped = value.clamp(0.0, 1.0).toDouble();
+  return (clamped * 100).round() / 100;
+}
+
+String dockGlassStyleLabel(DockGlassPreset style) => switch (style) {
+  DockGlassPreset.prism => 'Prism 磨砂',
+  DockGlassPreset.crystal => '清透液态玻璃',
+};
+
+String dockGlassSummary({
+  required bool glassEnabled,
+  required DockGlassPreset style,
+  required double frost,
+  required double refraction,
+}) {
+  if (!glassEnabled) return '已关闭（需先开启底栏液态玻璃）';
+  if (style == DockGlassPreset.prism) return 'Prism 磨砂';
+  final frostPct = (normalizeDockGlassAmount(frost) * 100).round();
+  final refractPct = (normalizeDockGlassAmount(refraction) * 100).round();
+  return '清透液态 · 磨砂 $frostPct% · 折射 $refractPct%';
+}
+
 /// TiebaFrosted 全部设置项（SharedPreferences + ChangeNotifier）。
 class FrostedSettings extends ChangeNotifier {
   FrostedSettings(this._prefs) {
@@ -21,6 +50,9 @@ class FrostedSettings extends ChangeNotifier {
   int accentColor = 0; // 0 跟随壁纸 Monet / ARGB / -1 色相循环
   ColorStyle colorStyle = ColorStyle.soft; // vivid / tinted / soft / monochrome
   LiquidGlassLevel liquidGlass = LiquidGlassLevel.standard;
+  DockGlassPreset dockGlassStyle = DockGlassPreset.prism;
+  double dockFrostAmount = defaultDockFrostAmount;
+  double dockRefractionAmount = defaultDockRefractionAmount;
   bool blurEffects = true;
   double fontScale = 1.0;
 
@@ -74,6 +106,14 @@ class FrostedSettings extends ChangeNotifier {
     LiquidGlassLevel.ultra => LiquidGlassQuality.ultra,
   };
 
+  NavigationDockGlassStyle get navigationDockGlassStyle =>
+      dockGlassStyle == DockGlassPreset.crystal
+          ? NavigationDockGlassStyle.crystal(
+              frost: dockFrostAmount,
+              refraction: dockRefractionAmount,
+            )
+          : const NavigationDockGlassStyle.prism();
+
   void _load() {
     darkMode = _prefs.getInt('dark_mode') ?? 0;
     accentColor = _prefs.getInt('accent_color') ?? 0;
@@ -83,6 +123,16 @@ class FrostedSettings extends ChangeNotifier {
         _prefs.getInt('liquid_glass') ?? LiquidGlassLevel.standard.index;
     liquidGlass = LiquidGlassLevel
         .values[glassIdx.clamp(0, LiquidGlassLevel.values.length - 1)];
+    final dockIdx =
+        _prefs.getInt('dock_glass_style') ?? DockGlassPreset.prism.index;
+    dockGlassStyle = DockGlassPreset
+        .values[dockIdx.clamp(0, DockGlassPreset.values.length - 1)];
+    dockFrostAmount = normalizeDockGlassAmount(
+      _prefs.getDouble('dock_frost_amount') ?? defaultDockFrostAmount,
+    );
+    dockRefractionAmount = normalizeDockGlassAmount(
+      _prefs.getDouble('dock_refraction_amount') ?? defaultDockRefractionAmount,
+    );
     blurEffects = _prefs.getBool('blur_effects') ?? true;
     fontScale = (_prefs.getDouble('font_scale') ?? 1.0).clamp(0.85, 1.3);
 
@@ -143,6 +193,45 @@ class FrostedSettings extends ChangeNotifier {
     liquidGlass = value;
     notifyListeners();
     await _prefs.setInt('liquid_glass', value.index);
+  }
+
+  void applyDockGlassStyle(DockGlassPreset value) {
+    if (dockGlassStyle == value) return;
+    dockGlassStyle = value;
+    notifyListeners();
+    _prefs.setInt('dock_glass_style', value.index);
+  }
+
+  void applyDockFrostAmount(double value) {
+    final normalized = normalizeDockGlassAmount(value);
+    if ((normalized - dockFrostAmount).abs() < 0.001) return;
+    dockFrostAmount = normalized;
+    notifyListeners();
+    _prefs.setDouble('dock_frost_amount', normalized);
+  }
+
+  void applyDockRefractionAmount(double value) {
+    final normalized = normalizeDockGlassAmount(value);
+    if ((normalized - dockRefractionAmount).abs() < 0.001) return;
+    dockRefractionAmount = normalized;
+    notifyListeners();
+    _prefs.setDouble('dock_refraction_amount', normalized);
+  }
+
+  void resetDockGlass() {
+    if (dockGlassStyle == DockGlassPreset.prism &&
+        (dockFrostAmount - defaultDockFrostAmount).abs() < 0.001 &&
+        (dockRefractionAmount - defaultDockRefractionAmount).abs() < 0.001) {
+      return;
+    }
+    dockGlassStyle = DockGlassPreset.prism;
+    dockFrostAmount = defaultDockFrostAmount;
+    dockRefractionAmount = defaultDockRefractionAmount;
+    notifyListeners();
+    _prefs
+      ..setInt('dock_glass_style', dockGlassStyle.index)
+      ..setDouble('dock_frost_amount', dockFrostAmount)
+      ..setDouble('dock_refraction_amount', dockRefractionAmount);
   }
 
   Future<void> setBlurEffects(bool value) async {

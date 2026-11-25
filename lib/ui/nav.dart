@@ -1,8 +1,14 @@
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
 
-Future<T?> pushPage<T>(BuildContext context, Widget page) {
-  return Navigator.of(context).push<T>(CardPageRoute<T>(builder: (_) => page));
+Future<T?> pushPage<T>(
+  BuildContext context,
+  Widget page, {
+  bool dragBack = true,
+}) {
+  return Navigator.of(
+    context,
+  ).push<T>(CardPageRoute<T>(builder: (_) => page, dragBackEnabled: dragBack));
 }
 
 /// 轻量半透明看图路由：淡入 + 轻缩放，配合看图器下拉跟手关闭实时透出底层页面。

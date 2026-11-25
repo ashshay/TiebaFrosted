@@ -205,6 +205,8 @@ void main() {
 
     // 6. 全局字体缩放滑块与重置按钮
     final slider = find.byType(Slider);
+    await tester.ensureVisible(slider);
+    await tester.pumpAndSettle();
     await tester.drag(slider, const Offset(120, 0));
     await tester.pumpAndSettle();
     expect(settings.fontScale, greaterThan(1.0));

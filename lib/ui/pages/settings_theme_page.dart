@@ -5,6 +5,7 @@ import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/settings.dart';
+import '../routes.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/segmented_capsule.dart';
@@ -179,6 +180,19 @@ class SettingsThemePage extends StatelessWidget {
                   );
                   if (picked != null) await settings.setLiquidGlass(picked);
                 },
+              ),
+              FrostedListRow(
+                title: const Text('底栏液态玻璃样式'),
+                subtitle: Text(
+                  dockGlassSummary(
+                    glassEnabled: settings.liquidGlass != LiquidGlassLevel.off,
+                    style: settings.dockGlassStyle,
+                    frost: settings.dockFrostAmount,
+                    refraction: settings.dockRefractionAmount,
+                  ),
+                ),
+                trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
+                onPressed: () => openDockGlassSettings(context),
               ),
               FrostedListRow(
                 title: const Text('顶栏毛玻璃模糊'),
