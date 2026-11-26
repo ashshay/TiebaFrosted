@@ -41,6 +41,15 @@ class FrostedStore extends ChangeNotifier {
   bool get isLoggedIn =>
       currentAccount != null && currentAccount!.bduss.isNotEmpty;
 
+  /// 是否具备发言（回帖 / 收藏 / 点赞…）所需的完整凭据。
+  ///
+  /// 写接口要求 BDUSS + STOKEN + tbs 同时存在：只有 BDUSS 的会话能正常浏览，
+  /// 但任何写操作都会被服务端回成 `用户未登录或登录失败`。
+  bool get canWrite => currentAccount?.canWrite ?? false;
+
+  /// 凭据缺哪一块，用于给用户一个能照着做的提示（空字符串表示不缺）。
+  String get writeBlockReason => currentAccount?.writeBlockReason ?? '';
+
   String get bduss => currentAccount?.bduss ?? '';
   String get stoken => currentAccount?.stoken ?? '';
   String get tbs => currentAccount?.tbs ?? '';

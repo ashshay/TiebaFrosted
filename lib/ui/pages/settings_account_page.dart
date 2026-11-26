@@ -3,6 +3,7 @@ import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/repo.dart';
 import '../../data/store.dart';
 import '../routes.dart';
 import '../widgets/common.dart';
@@ -16,6 +17,7 @@ class SettingsAccountPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<FrostedStore>();
+    final repo = context.read<TiebaRepo>();
     final scheme = context.colorScheme;
 
     return FrostedPage(
@@ -73,6 +75,11 @@ class SettingsAccountPage extends StatelessWidget {
                                   value: 'switch',
                                   label: '切换到此账号',
                                 ),
+                              if (!acc.canWrite)
+                                FrostedChoice(
+                                  value: 'relogin',
+                                  label: '补全发言凭据（缺 ${acc.writeBlockReason}）',
+                                ),
                               const FrostedChoice(
                                 value: 'delete',
                                 label: '移除此账号',
@@ -88,6 +95,18 @@ class SettingsAccountPage extends StatelessWidget {
                                 '已切换到 ${acc.displayName}',
                               );
                             }
+                          } else if (picked == 'relogin' && context.mounted) {
+                            final ok = await showFrostedConfirm(
+                              context,
+                              title: '补全发言凭据',
+                              message:
+                                  '将会清空旧 Cookie 并重新登录：旧的百度会话还在时，'
+                                  'passport 会复用那份已经失效的 STOKEN。',
+                              confirmText: '去登录',
+                            );
+                            if (ok == true && context.mounted) {
+                              await openLogin(context, fresh: true);
+                            }
                           } else if (picked == 'delete' && context.mounted) {
                             await store.removeAccount(acc.uid);
                             if (context.mounted) {
@@ -101,11 +120,57 @@ class SettingsAccountPage extends StatelessWidget {
                       ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    store.canWrite
+                        ? '当前账号可以正常回帖、收藏。'
+                        : '当前账号只能浏览：缺少 ${store.writeBlockReason}，'
+                              '回帖 / 收藏会被服务端判成未登录。请用「网页登录」重新登录，'
+                              '或粘贴含 STOKEN 的完整 Cookie。',
+                    style: AppTextStyle.footnote.of(context).copyWith(
+                      color: store.canWrite
+                          ? scheme.onSurfaceVariant
+                          : scheme.error,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: () => openLogin(context),
                   child: const Text('添加其他账号'),
                 ),
+                if (repo.lastWriteDiagnostic.isNotEmpty ||
+                    repo.api.replyProbe.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  FrostedCard(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '最近一次发言失败（反馈时请附上）',
+                          style: AppTextStyle.footnote.of(context).copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        SelectableText(
+                          [
+                            if (repo.lastWriteDiagnostic.isNotEmpty)
+                              repo.lastWriteDiagnostic,
+                            if (repo.api.replyProbe.isNotEmpty)
+                              '回复列表探测：${repo.api.replyProbe}',
+                          ].join('\n'),
+                          style: AppTextStyle.caption1.of(context).copyWith(
+                            color: scheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
     );

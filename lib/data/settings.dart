@@ -79,6 +79,9 @@ class FrostedSettings extends ChangeNotifier {
   /// 站外链接一律用内置浏览器打开；关掉后交给系统浏览器。
   bool useWebView = true;
 
+  /// Android 13+ 的预测性返回手势（跟手预览上一页）；关掉后与旧版一致。
+  bool predictiveBack = true;
+
   /// 启动时停在底栏哪一格：0 首页 / 1 动态 / 2 消息 / 3 我的。
   int startTab = 0;
 
@@ -151,6 +154,7 @@ class FrostedSettings extends ChangeNotifier {
     swipeSwitchFeed = _prefs.getBool('swipe_switch_feed') ?? true;
     homeShowHistoryForum = _prefs.getBool('home_show_history_forum') ?? true;
     useWebView = _prefs.getBool('use_webview') ?? true;
+    predictiveBack = _prefs.getBool('predictive_back') ?? true;
     startTab = (_prefs.getInt('start_tab') ?? 0).clamp(0, 3);
     defaultFeedTab = (_prefs.getInt('default_feed_tab') ?? 0).clamp(0, 2);
 
@@ -338,6 +342,13 @@ class FrostedSettings extends ChangeNotifier {
     useWebView = value;
     notifyListeners();
     await _prefs.setBool('use_webview', value);
+  }
+
+  Future<void> setPredictiveBack(bool value) async {
+    if (predictiveBack == value) return;
+    predictiveBack = value;
+    notifyListeners();
+    await _prefs.setBool('predictive_back', value);
   }
 
   Future<void> setStartTab(int value) async {

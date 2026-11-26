@@ -31,6 +31,23 @@ class AccountRecord {
 
   String get displayName => nameShow.isNotEmpty ? nameShow : name;
 
+  /// 写操作（回帖、收藏、点赞…）需要的凭据是否齐全。
+  ///
+  /// 贴吧的写接口同时校验 BDUSS、STOKEN 与 tbs，缺任一项都会回
+  /// `用户未登录或登录失败`；浏览接口只认 BDUSS，所以「能看不能发」正是
+  /// 半套凭据的典型表现。
+  bool get canWrite => bduss.isNotEmpty && stoken.isNotEmpty && tbs.isNotEmpty;
+
+  /// 缺哪一块凭据（空字符串表示不缺），用于提示用户怎么补。
+  String get writeBlockReason {
+    final missing = <String>[
+      if (stoken.isEmpty) 'STOKEN',
+      if (tbs.isEmpty) 'tbs',
+      if (bduss.isEmpty) 'BDUSS',
+    ];
+    return missing.isEmpty ? '' : missing.join(' / ');
+  }
+
   AccountRecord copyWith({
     String? name,
     String? nameShow,

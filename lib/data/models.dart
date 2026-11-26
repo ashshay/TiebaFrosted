@@ -7,8 +7,23 @@ class TiebaApiException implements Exception {
   final int code;
   final String message;
 
+  /// 服务端把「登录态缺失 / 失效」统一回成 `error_code=1` 加这句提示。
+  ///
+  /// 回帖、收藏这类写接口都会先校验 BDUSS + STOKEN + tbs，缺任何一项都会落到
+  /// 这个错误上；浏览类接口只要 BDUSS，所以「能看不能发」是它的典型形态。
+  bool get isLoginFailure =>
+      code == 1 && (message.contains('未登录') || message.contains('登录失败'));
+
   @override
   String toString() => message.isNotEmpty ? message : '贴吧接口错误 ($code)';
+}
+
+/// 凭据齐全、服务端却仍判未登录：这份会话已被判死，只能清空旧 Cookie 重登。
+///
+/// 单独分一个类型是因为「缺字段」和「字段齐全但被服务端拒绝」要给的出路不同：
+/// 前者补字段即可，后者必须换一份新的百度会话，否则重登也会复用旧 STOKEN。
+class TiebaSessionRejectedException extends TiebaApiException {
+  const TiebaSessionRejectedException(super.code, super.message);
 }
 
 class TiebaUser {

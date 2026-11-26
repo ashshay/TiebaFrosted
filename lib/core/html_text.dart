@@ -114,3 +114,44 @@ List<TiebaRichNode> parseTiebaPlainText(String text) {
   final h = int.tryParse(parts[1].trim()) ?? 0;
   return (w, h);
 }
+
+/// 把富文本节点拼成可粘贴的纯文本，规则与 TiebaLite 的 `List<PbContent>.plainText` 对齐：
+///
+/// - 文字 / @ / 链接 / 表情连成一段：链接只留显示文字，表情还原成 `#(名字)`
+///   （粘回贴吧仍会渲染成表情），@ 原样保留；
+/// - 图片 / 视频 / 语音没有文字，各自单独成行，用 `[图片]` 这类占位标出来
+///   （TiebaLite 里它们是独立的 render，`plainText` 用换行拼接）。
+String richTextToPlainText(List<TiebaRichNode> nodes) {
+  final segments = <String>[];
+  final run = StringBuffer();
+
+  void flushRun() {
+    if (run.isEmpty) return;
+    segments.add(run.toString());
+    run.clear();
+  }
+
+  for (final node in nodes) {
+    switch (node) {
+      case RichTextNode():
+        run.write(node.text);
+      case RichAtNode():
+        run.write(node.text);
+      case RichLinkNode():
+        run.write(node.label.isEmpty ? node.url : node.label);
+      case RichEmoticonNode():
+        run.write('#(${node.name})');
+      case RichImageNode():
+        flushRun();
+        segments.add('[图片]');
+      case RichVideoNode():
+        flushRun();
+        segments.add('[视频]');
+      case RichVoiceNode():
+        flushRun();
+        segments.add('[语音]');
+    }
+  }
+  flushRun();
+  return segments.join('\n').trim();
+}

@@ -54,6 +54,9 @@ String calculateTiebaSign(
 }
 
 /// 生成已排序且附带 `sign` 的 `application/x-www-form-urlencoded` 文本。
+///
+/// 空格用 `%20` 而不是 `+`：与 OkHttp 的 `FormBody` 逐字节一致，避免服务端
+/// 拿原始报文重算签名时因编码差异对不上。
 String encodeSignedFormBody(
   Map<String, String> params, {
   String appSecret = tiebaAppSecret,
@@ -61,7 +64,7 @@ String encodeSignedFormBody(
   final res = signFormParams(params, appSecret: appSecret);
   final encodedPairs = [
     for (final e in res.sorted)
-      '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+      '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
   ]..sort();
   encodedPairs.add('sign=${res.sign}');
   return encodedPairs.join('&');

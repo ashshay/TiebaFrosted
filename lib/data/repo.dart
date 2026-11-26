@@ -5,6 +5,7 @@ import 'cookie_vault.dart';
 import 'local_db.dart';
 import 'media_saver.dart';
 import 'models.dart';
+import 'native_channels.dart';
 import 'settings.dart';
 import 'store.dart';
 
@@ -160,6 +161,7 @@ class TiebaRepo {
         avatar: res.forum.avatar,
       );
     }
+    await _absorbTbs(res.tbs);
     return ForumPageResult(
       forum: res.forum,
       page: res.page,
@@ -222,10 +224,13 @@ class TiebaRepo {
     required String forumName,
     required bool like,
     String? tbsOverride,
-  }) => api.toggleLikeForum(
-    forumId: forumId,
-    forumName: forumName,
-    like: like,
+  }) => _write(
+    (tbs) => api.toggleLikeForum(
+      forumId: forumId,
+      forumName: forumName,
+      like: like,
+      tbsOverride: tbs,
+    ),
     tbsOverride: tbsOverride,
   );
 
@@ -233,9 +238,12 @@ class TiebaRepo {
     required int forumId,
     required String forumName,
     String? tbsOverride,
-  }) => api.signForum(
-    forumId: forumId,
-    forumName: forumName,
+  }) => _write(
+    (tbs) => api.signForum(
+      forumId: forumId,
+      forumName: forumName,
+      tbsOverride: tbs,
+    ),
     tbsOverride: tbsOverride,
   );
 
@@ -348,6 +356,7 @@ class TiebaRepo {
         avatar: res.thread.author.portrait,
       );
     }
+    await _absorbTbs(res.tbs);
     return ThreadPageResult(
       thread: res.thread,
       forum: res.forum,
@@ -377,16 +386,214 @@ class TiebaRepo {
 
   // ---- Likes / Store / Reply / Post / Vote ----
 
+  /// 最近一次写操作失败的现场信息（只记「字段在不在」，不含内容），
+  /// 供用户在账号页自取，便于定位「凭据看着齐全、服务端仍判未登录」。
+  String lastWriteDiagnostic = '';
+
+  /// 最近一次 `/c/s/login` 自检结果：判断 BDUSS 本身是否还活着。
+  String sessionCheck = '未检查';
+
+  /// 包一层写调用：发请求前先补齐登录凭据，遇到登录态错误时自愈一次再重试。
+  ///
+  /// 贴吧的写接口（回帖、发帖、收藏、点赞、签到…）都要求 BDUSS + STOKEN + tbs
+  /// 齐全；tbs 会随会话过期，STOKEN 也可能被抓错（网页登录那份只对网页有效），
+  /// 所以失败后先按贴吧域名的 Cookie 纠一次再重试，比直接把错误丢给用户有用。
+  /// 重试时丢掉调用方从帖子页带下来的旧 tbs，改用刚刷新到的账号 tbs。
+  Future<T> _write<T>(
+    Future<T> Function(String? tbsOverride) run, {
+    String? tbsOverride,
+  }) async {
+    await ensureWritableSession();
+    final inherited = (tbsOverride != null && tbsOverride.isNotEmpty)
+        ? tbsOverride
+        : null;
+    try {
+      return await run(inherited);
+    } on TiebaApiException catch (e) {
+      if (!e.isLoginFailure) rethrow;
+      final healed = await _refreshSession();
+      if (!healed) throw _sessionBroken(e);
+      try {
+        return await run(null);
+      } on TiebaApiException catch (retryError) {
+        if (!retryError.isLoginFailure) rethrow;
+        throw _sessionBroken(retryError);
+      }
+    }
+  }
+
+  /// 把服务端那句笼统的「用户未登录或登录失败」换成能照着做的提示。
+  ///
+  /// 提示里带上「凭据齐不齐」这一层信息：齐了还失败说明是会话被服务端判死
+  /// （多半得清 Cookie 重登），不齐则直接指出缺哪一项。
+  TiebaApiException _sessionBroken(TiebaApiException cause) {
+    final acc = store.currentAccount;
+    lastWriteDiagnostic = _diagnose(cause);
+    if (acc == null || acc.bduss.isEmpty) {
+      return const TiebaApiException(-1, '账号登录信息已丢失，请重新登录。');
+    }
+    final missing = acc.writeBlockReason;
+    if (missing.isNotEmpty) {
+      return TiebaApiException(
+        -1,
+        '当前账号缺少 $missing，只能浏览、不能发言。'
+        '请用「网页登录」重新登录，或粘贴含 STOKEN 的完整 Cookie。',
+      );
+    }
+    return const TiebaSessionRejectedException(
+      1,
+      '登录态已失效（BDUSS / STOKEN / tbs 都在，服务端仍判未登录），'
+      '需要清空旧 Cookie 重新登录。',
+    );
+  }
+
+  /// 只记录字段是否存在，不写任何凭据内容。
+  String _diagnose(TiebaApiException cause) {
+    final acc = store.currentAccount;
+    String has(String? v) => (v != null && v.isNotEmpty) ? '有' : '无';
+    final fields = <String>[
+      'BDUSS=${has(acc?.bduss)}',
+      'STOKEN=${has(acc?.stoken)}',
+      'tbs=${has(acc?.tbs)}',
+      'z_id=${has(acc?.zid)}',
+      'uid=${has(acc?.uid)}',
+      'clientId=${has(api.device.clientId)}',
+      'BAIDUID=${has(api.device.baiduId)}',
+    ].join(' ');
+    final stamp = DateTime.now().toIso8601String().substring(11, 19);
+    return '$stamp code=${cause.code} msg=${cause.message}\n'
+        '$fields\nsession=$sessionCheck';
+  }
+
+  /// 写操作前的登录态自检：补齐 STOKEN / z_id，缺 tbs 时重新取一次。
+  ///
+  /// 只粘贴 BDUSS、或网页登录时 Cookie 抓得太早，都会得到一个「能看不能写」的
+  /// 半套会话——浏览接口只认 BDUSS，所以帖子照常能看，而任何写操作都会被服务端
+  /// 回成 `用户未登录或登录失败`。这里尽量把缺的字段从 WebView 的 Cookie 罐补齐，
+  /// 补不齐时抛一条能照着做的错误，而不是让服务端那句话直接甩给用户。
+  ///
+  /// STOKEN 一律以**贴吧域名**下那一份为准：passport / wappass 也种了同名 Cookie，
+  /// 用错版本同样只会在写操作上失败（TiebaLite 的登录只读贴吧域名的 Cookie）。
+  Future<void> ensureWritableSession() async {
+    final acc = store.currentAccount;
+    if (acc == null || acc.bduss.isEmpty) {
+      throw const TiebaApiException(-1, '请先登录百度贴吧账号');
+    }
+    if (acc.canWrite && acc.zid.isNotEmpty) return;
+
+    var next = acc;
+    final jar = await NativeChannels.readTiebaCookies();
+    // 罐里是别的账号时不要拿它的 STOKEN 覆盖当前账号。
+    final jarBduss = jar['BDUSS'] ?? '';
+    final trustJar = jarBduss.isEmpty || jarBduss == next.bduss;
+    if (trustJar) {
+      final stoken = jar['STOKEN'] ?? '';
+      if (stoken.isNotEmpty && stoken != next.stoken) {
+        next = next.copyWith(stoken: stoken);
+      }
+      final zid = jar['BAIDUZID'] ?? jar['ZID'] ?? '';
+      if (zid.isNotEmpty && zid != next.zid) {
+        next = next.copyWith(zid: zid);
+      }
+      final baiduId = jar['BAIDUID'] ?? '';
+      if (next.baiduId.isEmpty && baiduId.isNotEmpty) {
+        next = next.copyWith(baiduId: baiduId);
+      }
+    }
+    if (next.tbs.isEmpty) {
+      try {
+        final info = await api.verifyLogin(
+          bduss: next.bduss,
+          stoken: next.stoken,
+        );
+        if (info.tbs.isNotEmpty) next = next.copyWith(tbs: info.tbs);
+        if (info.nameShow.isNotEmpty) {
+          next = next.copyWith(nameShow: info.nameShow);
+        }
+      } on Object {
+        // 取不到 tbs 就先不拦，让真正发写请求时的服务端返回说了算。
+      }
+    }
+    if (_accountChanged(acc, next)) {
+      await store.saveAccount(next);
+    }
+    if (next.stoken.isEmpty && next.tbs.isEmpty) {
+      throw TiebaApiException(
+        -1,
+        '当前账号只有 BDUSS（缺 ${next.writeBlockReason}），只能浏览、不能发言。'
+        '请用「网页登录」重新登录，或粘贴含 STOKEN 的完整 Cookie。',
+      );
+    }
+  }
+
+  /// 写失败后的自愈：重读贴吧域名的 Cookie，用新的 STOKEN / z_id 换一次 tbs。
+  ///
+  /// 有变化才算成功（调用方据此决定要不要重试），没有变化说明这份会话确实死了。
+  Future<bool> _refreshSession() async {
+    final acc = store.currentAccount;
+    if (acc == null || acc.bduss.isEmpty) return false;
+    var next = acc;
+    var changed = false;
+
+    final jar = await NativeChannels.readTiebaCookies();
+    final jarBduss = jar['BDUSS'] ?? '';
+    if (jarBduss.isEmpty || jarBduss == next.bduss) {
+      final stoken = jar['STOKEN'] ?? '';
+      if (stoken.isNotEmpty && stoken != next.stoken) {
+        next = next.copyWith(stoken: stoken);
+        changed = true;
+      }
+      final zid = jar['BAIDUZID'] ?? jar['ZID'] ?? '';
+      if (zid.isNotEmpty && zid != next.zid) {
+        next = next.copyWith(zid: zid);
+        changed = true;
+      }
+    }
+    try {
+      final info = await api.verifyLogin(bduss: next.bduss, stoken: next.stoken);
+      sessionCheck = '通过';
+      if (info.tbs.isNotEmpty && info.tbs != next.tbs) {
+        next = next.copyWith(tbs: info.tbs);
+        changed = true;
+      }
+    } on TiebaApiException catch (e) {
+      sessionCheck = '失败(${e.code} ${e.message})';
+    } on Object {
+      sessionCheck = '异常';
+    }
+    if (!changed) return false;
+    await store.saveAccount(next);
+    return true;
+  }
+
+  bool _accountChanged(AccountRecord a, AccountRecord b) =>
+      a.stoken != b.stoken ||
+      a.tbs != b.tbs ||
+      a.zid != b.zid ||
+      a.baiduId != b.baiduId ||
+      a.nameShow != b.nameShow;
+
+  /// 帖子页 / 吧首页下发的 anti tbs 是当前会话的权威值，账号里的 tbs
+  /// 缺失或过期时用它自愈（未登录时没有账号可写，直接跳过）。
+  Future<void> _absorbTbs(String tbs) async {
+    if (tbs.isEmpty) return;
+    final acc = store.currentAccount;
+    if (acc == null || acc.bduss.isEmpty || acc.tbs == tbs) return;
+    await store.saveAccount(acc.copyWith(tbs: tbs));
+  }
+
   Future<void> opAgree({
     required int threadId,
     int postId = 0,
     required bool agree,
     int objType = 3,
-  }) => api.opAgree(
-    threadId: threadId,
-    postId: postId,
-    opType: agree ? 0 : 1,
-    objType: objType,
+  }) => _write(
+    (_) => api.opAgree(
+      threadId: threadId,
+      postId: postId,
+      opType: agree ? 0 : 1,
+      objType: objType,
+    ),
   );
 
   Future<List<ThreadStoreItem>> getThreadStore({
@@ -399,12 +606,15 @@ class TiebaRepo {
     int postId = 0,
     int? forumId,
     required bool collect,
-  }) {
-    if (collect) {
-      return api.addThreadStore(threadId: threadId, postId: postId);
-    }
-    return api.removeThreadStore(threadId: threadId, forumId: forumId);
-  }
+  }) => _write(
+    (tbs) => collect
+        ? api.addThreadStore(
+            threadId: threadId,
+            postId: postId,
+            tbsOverride: tbs,
+          )
+        : api.removeThreadStore(threadId: threadId, forumId: forumId),
+  );
 
   Future<void> reply({
     required int forumId,
@@ -415,15 +625,18 @@ class TiebaRepo {
     int? subPostId,
     int? replyUid,
     String? tbsOverride,
-  }) => api.addPost(
-    forumId: forumId,
-    forumName: forumName,
-    threadId: threadId,
-    content: content,
-    nameShow: store.currentAccount?.displayName ?? '',
-    quotePostId: quotePostId,
-    subPostId: subPostId,
-    replyUid: replyUid,
+  }) => _write(
+    (tbs) => api.addPost(
+      forumId: forumId,
+      forumName: forumName,
+      threadId: threadId,
+      content: content,
+      nameShow: store.currentAccount?.displayName ?? '',
+      quotePostId: quotePostId,
+      subPostId: subPostId,
+      replyUid: replyUid,
+      tbsOverride: tbs,
+    ),
     tbsOverride: tbsOverride,
   );
 
@@ -433,12 +646,15 @@ class TiebaRepo {
     required String title,
     required String content,
     String? tbsOverride,
-  }) => api.addThread(
-    forumId: forumId,
-    forumName: forumName,
-    title: title,
-    content: content,
-    nameShow: store.currentAccount?.displayName ?? '',
+  }) => _write(
+    (tbs) => api.addThread(
+      forumId: forumId,
+      forumName: forumName,
+      title: title,
+      content: content,
+      nameShow: store.currentAccount?.displayName ?? '',
+      tbsOverride: tbs,
+    ),
     tbsOverride: tbsOverride,
   );
 
@@ -457,10 +673,12 @@ class TiebaRepo {
     required int forumId,
     required int threadId,
     required List<int> optionIds,
-  }) => api.votePoll(
-    forumId: forumId,
-    threadId: threadId,
-    optionIds: optionIds,
+  }) => _write(
+    (_) => api.votePoll(
+      forumId: forumId,
+      threadId: threadId,
+      optionIds: optionIds,
+    ),
   );
 
   Future<void> deletePost({
@@ -471,13 +689,16 @@ class TiebaRepo {
     bool isFloor = false,
     bool mine = true,
     String? tbsOverride,
-  }) => api.deletePost(
-    forumId: forumId,
-    forumName: forumName,
-    threadId: threadId,
-    postId: postId,
-    isFloor: isFloor,
-    mine: mine,
+  }) => _write(
+    (tbs) => api.deletePost(
+      forumId: forumId,
+      forumName: forumName,
+      threadId: threadId,
+      postId: postId,
+      isFloor: isFloor,
+      mine: mine,
+      tbsOverride: tbs,
+    ),
     tbsOverride: tbsOverride,
   );
 
@@ -488,12 +709,15 @@ class TiebaRepo {
     bool mine = true,
     bool hide = false,
     String? tbsOverride,
-  }) => api.deleteThread(
-    forumId: forumId,
-    forumName: forumName,
-    threadId: threadId,
-    mine: mine,
-    hide: hide,
+  }) => _write(
+    (tbs) => api.deleteThread(
+      forumId: forumId,
+      forumName: forumName,
+      threadId: threadId,
+      mine: mine,
+      hide: hide,
+      tbsOverride: tbs,
+    ),
     tbsOverride: tbsOverride,
   );
 
@@ -535,9 +759,12 @@ class TiebaRepo {
     required String portrait,
     required bool follow,
     String? tbsOverride,
-  }) => api.toggleFollowUser(
-    portrait: portrait,
-    follow: follow,
+  }) => _write(
+    (tbs) => api.toggleFollowUser(
+      portrait: portrait,
+      follow: follow,
+      tbsOverride: tbs,
+    ),
     tbsOverride: tbsOverride,
   );
 
@@ -545,7 +772,9 @@ class TiebaRepo {
     required String nickName,
     required String intro,
     required int sex,
-  }) => api.modifyProfile(nickName: nickName, intro: intro, sex: sex);
+  }) => _write(
+    (_) => api.modifyProfile(nickName: nickName, intro: intro, sex: sex),
+  );
 
   // ---- Notifications ----
 
@@ -586,11 +815,26 @@ class TiebaRepo {
   // ---- Auth ----
 
   /// 使用抓取或手动粘贴的 Cookie（至少含 BDUSS）完成校验并落盘账号。
+  ///
+  /// 手动粘贴往往只带 BDUSS，而贴吧的写接口（回帖 / 收藏 / 点赞…）还要 STOKEN、
+  /// tbs 与 z_id，缺一项就会得到「能看不能写」的半套会话。这里先用**贴吧域名**
+  /// 下的 Cookie 把缺的字段补齐（与 TiebaLite 一致：它只读 tbwise 页面的 Cookie，
+  /// 免得拿到 passport / wappass 那份对写接口无效的 STOKEN），再向 `/c/s/login`
+  /// 换一次 tbs，尽量落一个完整会话。
   Future<AccountRecord> loginWithCookieString(String rawCookie) async {
     final vault = CookieVault()..loadFromRaw(rawCookie);
     final bduss = vault.bduss;
     if (bduss.isEmpty) {
       throw const TiebaApiException(-1, 'Cookie 中未找到 BDUSS');
+    }
+    final jar = await NativeChannels.readTiebaCookies();
+    final jarBduss = jar['BDUSS'] ?? '';
+    if (jarBduss.isEmpty || jarBduss == bduss) {
+      vault.fillMissing(jar);
+    } else {
+      // 罐里是另一个账号的会话，只借与账号无关的字段。
+      final baiduId = jar['BAIDUID'] ?? '';
+      if (baiduId.isNotEmpty) vault.fillMissing({'BAIDUID': baiduId});
     }
     final stoken = vault.stoken;
     final info = await api.verifyLogin(bduss: bduss, stoken: stoken);
@@ -606,6 +850,7 @@ class TiebaRepo {
       stoken: stoken,
       tbs: info.tbs,
       cookie: vault.rawHeader,
+      zid: vault.zid,
       baiduId: vault.baiduId,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );

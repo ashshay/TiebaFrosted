@@ -170,7 +170,10 @@ class MainActivity : FlutterActivity() {
         val manager = CookieManager.getInstance()
         manager.flush()
         val merged = linkedMapOf<String, String>()
-        for (url in cookieUrls.keys) {
+        // 反序合并：贴吧域名的 Cookie 最后写入，同名以贴吧为准。passport / wappass
+        // 也会种 STOKEN，但那是网页登录凭证，贴吧写接口（回帖 / 收藏）不认它，
+        // 混进来就会变成「帖子能看、收藏和回帖都说未登录」。
+        for (url in cookieUrls.keys.reversed()) {
             val raw = manager.getCookie(url) ?: continue
             for (part in raw.split(';')) {
                 val trimmed = part.trim()

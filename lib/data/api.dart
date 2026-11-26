@@ -671,10 +671,52 @@ class TiebaApi {
   }
 
   /// 用户帖子/回复列表（Protobuf V12 `feed/userpost?cmd=303002&format=protobuf`）。
+  ///
+  /// 「回复」列表的请求形状在不同账号上判定不一致：带 `stoken` 有时会被当成
+  /// 「视频」页签回空壳，不带又可能被当成访客不给数据（他人回复尤其明显）。
+  /// 所以首屏挨个形状试一次，哪次有数据就记住哪种——翻页沿用，空页不再试。
   Future<List<UserPostItem>> userPosts({
     required int uid,
     int page = 1,
     bool isThread = true,
+  }) async {
+    if (isThread) {
+      return _userPostsOnce(uid: uid, page: page, isThread: true, shape: 0);
+    }
+    final tried = <int>{};
+    final probe = <String>[];
+    for (final shape in <int>[_replyShape, 0, 1, 2]) {
+      if (!tried.add(shape)) continue;
+      final list = await _userPostsOnce(
+        uid: uid,
+        page: page,
+        isThread: false,
+        shape: shape,
+      );
+      if (page == 1) probe.add('shape$shape=${list.length}');
+      if (list.isNotEmpty) {
+        _replyShape = shape;
+        if (page == 1) replyProbe = probe.join(' ');
+        return list;
+      }
+      // 翻页拿到空页就是到底了，不必再换形状重试。
+      if (page > 1) break;
+    }
+    if (page == 1) replyProbe = probe.join(' ');
+    return const [];
+  }
+
+  /// 命中过的「回复」请求形状，首屏探测后固定下来。
+  int _replyShape = 0;
+
+  /// 最近一次「回复」列表形状探测的结果（各种形状各返回几条），便于用户反馈。
+  String replyProbe = '';
+
+  Future<List<UserPostItem>> _userPostsOnce({
+    required int uid,
+    required int page,
+    required bool isThread,
+    required int shape,
   }) async {
     final cred = credentialProvider();
     final reqBytes = TiebaProtoCodec.encodeUserPostRequest(
@@ -686,14 +728,13 @@ class TiebaApi {
       stoken: cred.stoken,
       tbs: cred.tbs,
       zid: cred.zid,
+      shape: shape,
     );
     final respBytes = await _postProto(
       path: '/c/u/feed/userpost?cmd=303002&format=protobuf',
       protoBytes: reqBytes,
       clientVersion: TiebaClientVersion.v12,
-      // 「回复」列表只要请求里带 stoken（proto 与 multipart 两处任一），
-      // 服务端就回落到「视频」页签、下发空列表；见 encodeUserPostRequest。
-      needStokenPart: isThread,
+      needStokenPart: isThread || shape == 1,
     );
     return TiebaProtoCodec.decodeUserPostResponse(respBytes);
   }
@@ -1140,17 +1181,31 @@ class TiebaApi {
     return [for (final item in j.objList('store_thread')) ThreadStoreItem.fromJson(item)];
   }
 
+  /// 收藏帖子。
+  ///
+  /// 除了 TiebaLite 用的 `data` + `stoken`，这里再带上 `tbs` 与 `user_id`：
+  /// 贴吧写接口既认 STOKEN 也认 tbs，多带一份签名参数不会影响服务端，却能在
+  /// STOKEN 被抓错（网页登录那份只对网页有效）时仍然收藏成功。
   Future<void> addThreadStore({
     required int threadId,
     int postId = 0,
+    String? tbsOverride,
   }) async {
     final cred = credentialProvider();
+    final tbs = (tbsOverride != null && tbsOverride.isNotEmpty)
+        ? tbsOverride
+        : cred.tbs;
     final payload = jsonEncode([
       {'tid': '$threadId', 'pid': '$postId', 'status': 1},
     ]);
     await _postOfficialJson(
       '/c/c/post/addstore',
-      {'data': payload, 'stoken': cred.stoken},
+      {
+        'data': payload,
+        'stoken': cred.stoken,
+        if (tbs.isNotEmpty) 'tbs': tbs,
+        if (cred.uid.isNotEmpty) 'user_id': cred.uid,
+      },
       dropParams: const {'oaid'},
       extraHeaders: {
         'cookie': 'ka=open',
@@ -1515,8 +1570,9 @@ class TiebaApi {
 
   Map<String, String> _baseCommonParams(String bduss) => {
     if (bduss.isNotEmpty) 'BDUSS': bduss,
-    if (device.clientId != null && device.clientId!.isNotEmpty)
-      '_client_id': device.clientId!,
+    // 与 TiebaLite 一致：拿不到 sync 下发的 client_id 时退回随机值，绝不发空。
+    // 少了它，服务端会把写请求当成来路不明的会话。
+    '_client_id': device.effectiveClientId,
     '_client_type': '2',
     '_os_version': device.osVersion,
     'model': device.model,

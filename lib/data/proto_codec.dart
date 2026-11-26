@@ -989,6 +989,13 @@ abstract final class TiebaProtoCodec {
     return UserProfileResult(user: user, tbs: tbs, posts: posts);
   }
 
+  /// 用户帖子 / 回复列表。
+  ///
+  /// [shape] 用来试不同的请求形状——「回复」列表在不同账号上对
+  /// `stoken` / `is_view_card` 的判定不一致（见 [TiebaApi.userPosts]）：
+  /// - 0：默认（不带 stoken，带 is_thread / subtype / is_view_card / q_type）
+  /// - 1：与 TiebaLite 一致（带 stoken，其余同 0）
+  /// - 2：与 aiotieba 一致（只带 uid / need_content / pn / rn）
   static Uint8List encodeUserPostRequest({
     required TiebaDevice device,
     required int uid,
@@ -998,13 +1005,16 @@ abstract final class TiebaProtoCodec {
     String stoken = '',
     String tbs = '',
     String zid = '',
+    int shape = 0,
   }) {
     final w = ProtoWriter();
     w.writeInt64(1, uid);
     w.writeUint32(2, 20); // rn
-    w.writeUint32(4, isThread ? 1 : 0, emitZero: true);
+    if (shape != 2) {
+      w.writeUint32(4, isThread ? 1 : 0, emitZero: true); // is_thread
+    }
     w.writeUint32(5, 1); // need_content
-    if (!isThread) w.writeUint32(9, 0, emitZero: true); // subtype
+    if (shape != 2 && !isThread) w.writeUint32(9, 0, emitZero: true); // subtype
     w.writeUint32(26, page); // pn
     w.writeMessage(
       27,
@@ -1012,18 +1022,21 @@ abstract final class TiebaProtoCodec {
         device: device,
         clientVersion: TiebaClientVersion.v12,
         bduss: bduss,
-        // 「回复」列表带上 stoken 服务端就回落到「视频」页签、只回空列表，
+        // 「回复」列表带 stoken 有时会被服务端当成「视频」页签、只回空列表，
         // 帖子列表则相反，必须带 stoken 才是本人的帖。
-        stoken: isThread ? stoken : '',
+        stoken: (isThread || shape == 1) ? stoken : '',
         tbs: tbs,
         zid: zid,
       ),
     );
-    w.writeInt32(29, device.screenWidth);
-    w.writeInt32(30, device.screenHeight);
-    w.writeDouble(31, device.screenDensity);
-    w.writeInt32(32, 1); // q_type
-    w.writeInt32(33, isThread ? 1 : 0, emitZero: true); // is_view_card
+    if (shape != 2) {
+      w.writeInt32(29, device.screenWidth);
+      w.writeInt32(30, device.screenHeight);
+      w.writeDouble(31, device.screenDensity);
+      w.writeInt32(32, 1); // q_type
+      // is_view_card 是非 optional 字段，0 不写（与 TiebaLite 的报文一致）。
+      if (isThread) w.writeInt32(33, 1);
+    }
     return _wrapRequestData(w.toBytes());
   }
 

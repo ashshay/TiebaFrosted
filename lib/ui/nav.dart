@@ -1,14 +1,19 @@
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/prism_ui.dart';
 
+import 'predictive_back.dart';
+
 Future<T?> pushPage<T>(
   BuildContext context,
   Widget page, {
   bool dragBack = true,
 }) {
-  return Navigator.of(
-    context,
-  ).push<T>(CardPageRoute<T>(builder: (_) => page, dragBackEnabled: dragBack));
+  return Navigator.of(context).push<T>(
+    CardPageRoute<T>(
+      builder: (_) => PredictiveBackHost(child: page),
+      dragBackEnabled: dragBack,
+    ),
+  );
 }
 
 /// 轻量半透明看图路由：淡入 + 轻缩放，配合看图器下拉跟手关闭实时透出底层页面。
@@ -24,7 +29,7 @@ Future<T?> pushLightboxPage<T>(BuildContext context, Widget page) {
       reverseTransitionDuration: disableAnim
           ? Duration.zero
           : const Duration(milliseconds: 190),
-      pageBuilder: (_, _, _) => page,
+      pageBuilder: (_, _, _) => PredictiveBackHost(child: page),
       transitionsBuilder: (context, animation, _, child) {
         if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
           return child;

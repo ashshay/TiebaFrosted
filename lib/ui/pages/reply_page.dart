@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../core/emoticons.dart';
 import '../../data/local_db.dart';
 import '../../data/repo.dart';
+import '../routes.dart';
 import '../widgets/common.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/press_scale.dart';
@@ -211,7 +212,8 @@ class _ReplyPageState extends State<ReplyPage> {
         _submitting = false;
         _statusText = '';
       });
-      showFrostedToast(context, cleanError(e), level: BannerLevel.error);
+      // 正文还在草稿里，登录态问题直接给一个去登录的入口，回来重发即可。
+      await handleWriteFailure(context, e);
     }
   }
 

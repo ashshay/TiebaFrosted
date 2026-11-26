@@ -49,6 +49,7 @@ import 'pages/user_profile_page.dart';
 import 'pages/video_page.dart';
 import 'pages/web_page.dart';
 import 'widgets/common.dart';
+import 'widgets/copy_dialog.dart';
 
 Future<void> openForum(
   BuildContext context,
@@ -284,8 +285,8 @@ Future<void> openVideoPlayer(
   String title = '视频播放',
 }) => pushPage(context, VideoPage(videoUrl: videoUrl, title: title));
 
-Future<bool?> openLogin(BuildContext context) =>
-    pushPage<bool>(context, const LoginPage());
+Future<bool?> openLogin(BuildContext context, {bool fresh = false}) =>
+    pushPage<bool>(context, LoginPage(fresh: fresh));
 
 Future<void> openWeb(
   BuildContext context,
@@ -378,6 +379,7 @@ Future<bool> showThreadContextMenu(
       myUid > 0 &&
       (thread.authorId == myUid || thread.author.id == myUid);
   final choices = <FrostedChoice<String>>[
+    const FrostedChoice(value: 'copy_text', label: '复制'),
     const FrostedChoice(value: 'copy_link', label: '复制帖子链接'),
     const FrostedChoice(value: 'share', label: '分享帖子'),
     if (thread.forumName.isNotEmpty)
@@ -410,6 +412,14 @@ Future<bool> showThreadContextMenu(
   if (picked == null || !context.mounted) return false;
   final url = 'https://tieba.baidu.com/p/${thread.effectiveId}';
   switch (picked) {
+    case 'copy_text':
+      await showCopyTextDialog(
+        context,
+        [
+          thread.displayTitle,
+          thread.abstractText,
+        ].map((e) => e.trim()).where((e) => e.isNotEmpty).join('\n'),
+      );
     case 'copy_link':
       await Clipboard.setData(ClipboardData(text: url));
       if (context.mounted) showFrostedToast(context, '已复制链接');
@@ -496,19 +506,77 @@ Future<bool> showThreadContextMenu(
 }
 
 /// 辅助检查登录态，未登录时引导前往登录页。
+///
+/// 已登录但凭据不全（最常见的是只粘贴了 BDUSS）时会尝试用 WebView Cookie 罐
+/// 补齐 STOKEN / z_id 并刷新 tbs；补不齐就提示重新登录，否则后面的写请求只会
+/// 拿到一句服务端的「用户未登录或登录失败」。
 Future<bool> ensureLoggedIn(BuildContext context, {String? reason}) async {
-  if (context.read<TiebaRepo>().isLoggedIn) return true;
+  final repo = context.read<TiebaRepo>();
+  if (!repo.isLoggedIn) {
+    final ok = await showFrostedConfirm(
+      context,
+      title: '需要登录',
+      message: reason ?? '请先登录百度贴吧账号以继续此操作',
+      confirmText: '去登录',
+    );
+    if (ok == true && context.mounted) {
+      final loggedIn = await openLogin(context);
+      if (loggedIn != true) return false;
+      if (!context.mounted) return false;
+      return _ensureWritableSession(context, repo);
+    }
+    return false;
+  }
+  return _ensureWritableSession(context, repo);
+}
+
+/// 写操作失败的统一收尾：登录态问题直接把「清空旧 Cookie 重新登录」摆出来。
+///
+/// 收藏、回帖这些动作失败时，用户最需要的是一个能点的出路；会话被服务端判死
+/// 时不清 Cookie 重登也没用（passport 会复用那份失效的 STOKEN）。
+Future<void> handleWriteFailure(BuildContext context, Object error) async {
+  if (!context.mounted) return;
+  showFrostedToast(context, cleanError(error), level: BannerLevel.error);
+  if (error is! TiebaApiException || !error.isLoginFailure) return;
+  if (!context.mounted) return;
   final ok = await showFrostedConfirm(
     context,
-    title: '需要登录',
-    message: reason ?? '请先登录百度贴吧账号以继续此操作',
+    title: '需要重新登录',
+    message: error is TiebaSessionRejectedException
+        ? '会先清空旧的百度 Cookie 再登录，否则会继续复用那份已经失效的会话。'
+        : '登录凭据不完整，重新登录一次即可。',
     confirmText: '去登录',
+    cancelText: '稍后',
   );
   if (ok == true && context.mounted) {
-    final loggedIn = await openLogin(context);
-    return loggedIn == true;
+    await openLogin(context, fresh: true);
   }
-  return false;
+}
+
+/// 写操作前的登录态兜底：凭据不全时给一条能照着做的提示并引导重新登录。
+Future<bool> _ensureWritableSession(
+  BuildContext context,
+  TiebaRepo repo,
+) async {
+  try {
+    await repo.ensureWritableSession();
+    return true;
+  } on Object catch (e) {
+    if (!context.mounted) return false;
+    final ok = await showFrostedConfirm(
+      context,
+      title: '登录凭据不完整',
+      message: cleanError(e),
+      confirmText: '重新登录',
+      cancelText: '稍后',
+    );
+    if (ok == true && context.mounted) {
+      // 清掉旧会话再登录：不清的话 passport 会复用那个已经失效的 STOKEN。
+      final loggedIn = await openLogin(context, fresh: true);
+      return loggedIn == true;
+    }
+    return false;
+  }
 }
 
 bool _okSignRunning = false;

@@ -27,6 +27,7 @@ class PostTile extends StatelessWidget {
     this.onAuthorTap,
     this.onAgreeTap,
     this.onReplyTap,
+    this.onCopyTap,
     this.onSubPostsTap,
     this.onMoreTap,
     this.onLinkTap,
@@ -47,6 +48,9 @@ class PostTile extends StatelessWidget {
   final VoidCallback? onAuthorTap;
   final VoidCallback? onAgreeTap;
   final VoidCallback? onReplyTap;
+
+  /// 长按正文：直接打开「复制」面板（可长按框选），不用先进菜单。
+  final VoidCallback? onCopyTap;
   final VoidCallback? onSubPostsTap;
   final VoidCallback? onMoreTap;
   final void Function(String url)? onLinkTap;
@@ -163,16 +167,25 @@ class PostTile extends StatelessWidget {
             ),
             const SizedBox(height: 6),
           ],
-          TiebaRichContent(
-            nodes: post.content,
-            hideMedia: settings.hideMedia,
-            style: AppTextStyle.subheadline
-                .of(context)
-                .copyWith(color: scheme.onSurface),
-            onLinkTap: onLinkTap,
-            onAtTap: onAtTap,
-            onImageTap: onImageTap,
-            onVideoTap: onVideoTap,
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onLongPress: onCopyTap == null
+                ? null
+                : () {
+                    HapticFeedback.selectionClick();
+                    onCopyTap!();
+                  },
+            child: TiebaRichContent(
+              nodes: post.content,
+              hideMedia: settings.hideMedia,
+              style: AppTextStyle.subheadline
+                  .of(context)
+                  .copyWith(color: scheme.onSurface),
+              onLinkTap: onLinkTap,
+              onAtTap: onAtTap,
+              onImageTap: onImageTap,
+              onVideoTap: onVideoTap,
+            ),
           ),
           if (!isFirstFloor &&
               (post.subPosts.isNotEmpty || post.subPostNumber > 0)) ...[

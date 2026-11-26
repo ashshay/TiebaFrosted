@@ -126,6 +126,16 @@ class SettingsHabitPage extends StatelessWidget {
                 ),
               ),
               FrostedListRow(
+                title: const Text('预测性返回手势'),
+                subtitle: const Text('从左边缘滑动时先预览上一页，松手才返回（Android 13+）'),
+                trailing: Switch(
+                  value: settings.predictiveBack,
+                  onChanged: settings.setPredictiveBack,
+                ),
+                onPressed: () =>
+                    settings.setPredictiveBack(!settings.predictiveBack),
+              ),
+              FrostedListRow(
                 title: const Text('底栏「我的」显示头像'),
                 trailing: Switch(
                   value: settings.profileTabAvatar,

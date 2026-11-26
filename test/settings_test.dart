@@ -102,6 +102,31 @@ void main() {
     expect(find.text('登录后查看关注动态'), findsOneWidget);
   });
 
+  testWidgets('使用习惯里的预测性返回开关会落盘', (tester) async {
+    final settings = await bootApp(tester);
+    expect(settings.predictiveBack, isTrue);
+
+    final navContext = tester.element(find.text('首页'));
+    openSettingsHabit(navContext);
+    await tester.pumpAndSettle();
+
+    final row = find.text('预测性返回手势');
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(settings.predictiveBack, isFalse);
+    expect(
+      (await SharedPreferences.getInstance()).getBool('predictive_back'),
+      isFalse,
+    );
+
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(settings.predictiveBack, isTrue);
+  });
+
   testWidgets('SettingsThemePage controls all update theme and liquid glass', (
     tester,
   ) async {

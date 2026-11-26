@@ -38,6 +38,27 @@ abstract final class NativeChannels {
     }
   }
 
+  /// 只取贴吧域名下的 Cookie（等价于 TiebaLite 的
+  /// `CookieManager.getCookie("https://tieba.baidu.com")`）。
+  ///
+  /// 贴吧写接口认的是贴吧域名的 `STOKEN`；passport / wappass 域名下也种了同名
+  /// Cookie，那是网页登录凭证，混进来就会拿到错的那一份——表现为帖子能看、
+  /// 收藏和回帖全被服务端判成未登录。
+  static Future<Map<String, String>> readTiebaCookies() async {
+    final raw = await readRawCookie(url: 'https://tieba.baidu.com');
+    if (raw.isEmpty) return const {};
+    final map = <String, String>{};
+    for (final part in raw.split(';')) {
+      final trimmed = part.trim();
+      final idx = trimmed.indexOf('=');
+      if (idx <= 0) continue;
+      final key = trimmed.substring(0, idx).trim();
+      final value = trimmed.substring(idx + 1).trim();
+      if (key.isNotEmpty && value.isNotEmpty) map[key] = value;
+    }
+    return map;
+  }
+
   static Future<void> injectCookies(Map<String, String> cookies) async {
     try {
       await _cookies.invokeMethod<void>('inject', {'cookies': cookies});

@@ -5,10 +5,12 @@ import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/html_text.dart';
 import '../../data/models.dart';
 import '../../data/repo.dart';
 import '../routes.dart';
 import '../widgets/common.dart';
+import '../widgets/copy_dialog.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/post_tile.dart';
 import '../widgets/refresh.dart';
@@ -166,7 +168,7 @@ class _SubPostsPageState extends State<SubPostsPage> {
     } on Object catch (e) {
       if (!mounted) return;
       setState(() => _sending = false);
-      showFrostedToast(context, cleanError(e), level: BannerLevel.error);
+      await handleWriteFailure(context, e);
     }
   }
 
@@ -189,6 +191,10 @@ class _SubPostsPageState extends State<SubPostsPage> {
       showFrostedToast(context, cleanError(e), level: BannerLevel.error);
     }
   }
+
+  /// 长按楼中楼复制这条回复的纯文字；点按仍是「回复此人」。
+  Future<void> _copySubPost(TiebaSubPost sub) =>
+      showCopyTextDialog(context, richTextToPlainText(sub.content));
 
   @override
   Widget build(BuildContext context) {
@@ -347,6 +353,7 @@ class _SubPostsPageState extends State<SubPostsPage> {
                                     : null,
                                 onReplyTap: () =>
                                     setState(() => _replyTarget = sub),
+                                onLongPress: () => _copySubPost(sub),
                                 onAgreeTap: () => _toggleSubAgree(i),
                                 onLinkTap: (url) => openTiebaUrl(context, url),
                                 onAtTap: (uid, name) => openUserProfile(

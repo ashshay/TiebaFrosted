@@ -22,6 +22,7 @@ class SubPostTile extends StatelessWidget {
     this.lzUserId = 0,
     this.onAuthorTap,
     this.onReplyTap,
+    this.onLongPress,
     this.onAgreeTap,
     this.onLinkTap,
     this.onAtTap,
@@ -32,6 +33,7 @@ class SubPostTile extends StatelessWidget {
   final int lzUserId;
   final VoidCallback? onAuthorTap;
   final VoidCallback? onReplyTap;
+  final VoidCallback? onLongPress;
   final VoidCallback? onAgreeTap;
   final void Function(String url)? onLinkTap;
   final void Function(int uid, String name)? onAtTap;
@@ -47,6 +49,7 @@ class SubPostTile extends StatelessWidget {
 
     return FrostedCard(
       onPressed: onReplyTap,
+      onLongPress: onLongPress,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

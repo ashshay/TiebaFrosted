@@ -243,6 +243,55 @@ void main() {
     });
   });
 
+  group('复制文字（富文本 → 纯文本，规则对齐 TiebaLite plainText）', () {
+    test('文字与 @ 原样保留，表情还原成贴吧标记且不换行', () {
+      final text = richTextToPlainText(const [
+        RichTextNode('楼主说得对 '),
+        RichAtNode(text: '@某吧友', uid: 42),
+        RichEmoticonNode(id: 'image_emoticon25', name: '滑稽'),
+        RichTextNode('了'),
+      ]);
+      expect(text, '楼主说得对 @某吧友#(滑稽)了');
+    });
+
+    test('链接只留显示文字，文字为空时退回地址', () {
+      expect(
+        richTextToPlainText(const [
+          RichLinkNode(label: '点这里', url: 'https://a.com/x'),
+        ]),
+        '点这里',
+      );
+      expect(
+        richTextToPlainText(const [
+          RichLinkNode(label: 'https://a.com/x', url: 'https://a.com/x'),
+        ]),
+        'https://a.com/x',
+      );
+      expect(
+        richTextToPlainText(const [
+          RichLinkNode(label: '', url: 'https://b.com'),
+        ]),
+        'https://b.com',
+      );
+    });
+
+    test('图片 / 视频 / 语音各自单独成行（TiebaLite 用换行拼 render）', () {
+      final text = richTextToPlainText(const [
+        RichTextNode('看这个'),
+        RichImageNode(url: 'u', originUrl: 'o'),
+        RichVideoNode(coverUrl: 'c', videoUrl: 'v'),
+        RichVoiceNode(md5: 'm', durationMs: 3000),
+        RichTextNode('好看'),
+      ]);
+      expect(text, '看这个\n[图片]\n[视频]\n[语音]\n好看');
+    });
+
+    test('纯空白内容得到空串，调用方据此提示「没有可复制的文字」', () {
+      expect(richTextToPlainText(const [RichTextNode('   ')]), isEmpty);
+      expect(richTextToPlainText(const []), isEmpty);
+    });
+  });
+
   group('ProfileHeaderLayout geometry regression', () {
     test('elements never clip outside header extent across progress 0..1', () {
       for (final coverHeight in const [

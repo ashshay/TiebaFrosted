@@ -6,6 +6,7 @@ import 'package:prism_ui/icons/icons.dart';
 import 'package:prism_ui/prism_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/html_text.dart';
 import '../../data/models.dart';
 import '../../data/native_channels.dart';
 import '../../data/repo.dart';
@@ -15,6 +16,7 @@ import '../chrome.dart';
 import '../routes.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/copy_dialog.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/post_tile.dart';
 import '../widgets/press_scale.dart';
@@ -491,7 +493,7 @@ class _ThreadPageState extends State<ThreadPage> {
     } on Object catch (e) {
       if (!mounted) return;
       setState(() => _thread = prev);
-      showFrostedToast(context, cleanError(e), level: BannerLevel.error);
+      unawaited(handleWriteFailure(context, e));
     }
   }
 
@@ -560,6 +562,7 @@ class _ThreadPageState extends State<ThreadPage> {
         const FrostedChoice(value: 'jump', label: '跳页'),
         if (_effectiveForumName.isNotEmpty)
           FrostedChoice(value: 'forum', label: '进入 $_effectiveForumName吧'),
+        const FrostedChoice(value: 'copy_text', label: '复制'),
         const FrostedChoice(value: 'copy', label: '复制链接'),
         const FrostedChoice(value: 'share', label: '分享帖子'),
         const FrostedChoice(value: 'report', label: '举报帖子'),
@@ -601,6 +604,14 @@ class _ThreadPageState extends State<ThreadPage> {
         }
       case 'forum':
         await openForum(context, _effectiveForumName);
+      case 'copy_text':
+        await showCopyTextDialog(
+          context,
+          [
+            _thread.displayTitle,
+            if (_firstFloor != null) richTextToPlainText(_firstFloor!.content),
+          ].where((e) => e.isNotEmpty).join('\n'),
+        );
       case 'copy':
         await Clipboard.setData(ClipboardData(text: url));
         if (mounted) showFrostedToast(context, '已复制链接');
@@ -633,8 +644,10 @@ class _ThreadPageState extends State<ThreadPage> {
       title: '${post.floor}楼 · ${post.author.displayName}',
       choices: [
         const FrostedChoice(value: 'reply', label: '回复此楼'),
-        const FrostedChoice(value: 'subposts', label: '查看楼中楼'),
+        // 主楼没有楼中楼，别给一个点进去空空如也的入口。
+        if (!isOp) const FrostedChoice(value: 'subposts', label: '查看楼中楼'),
         const FrostedChoice(value: 'author', label: '查看作者主页'),
+        const FrostedChoice(value: 'copy_text', label: '复制'),
         const FrostedChoice(value: 'copy', label: '复制楼层链接'),
         const FrostedChoice(value: 'report', label: '举报此楼'),
         if (mine && !isOp)
@@ -681,6 +694,9 @@ class _ThreadPageState extends State<ThreadPage> {
             initialName: post.author.displayName,
           );
         }
+      case 'copy_text':
+        // 首楼的标题并进了正文首行，复制时按「标题 + 正文」拼回去。
+        await _copyPost(post);
       case 'copy':
         final link = 'https://tieba.baidu.com/p/${widget.threadId}?pid=${post.id}';
         await Clipboard.setData(ClipboardData(text: link));
@@ -699,6 +715,20 @@ class _ThreadPageState extends State<ThreadPage> {
         }
     }
   }
+
+  /// 与 TiebaLite 一致：首楼复制「标题 + 正文」，其余楼层只复制正文。
+  String _copyTextOf(TiebaPost post) {
+    final body = richTextToPlainText(post.content);
+    if (post.floor != 1) return body;
+    return [
+      _thread.displayTitle,
+      body,
+    ].where((e) => e.isNotEmpty).join('\n');
+  }
+
+  /// 打开「复制」面板：正文可长按框选，也可以一键复制全部。
+  Future<void> _copyPost(TiebaPost post) =>
+      showCopyTextDialog(context, _copyTextOf(post));
 
   /// 跳楼进来后，在楼层上方提示「还能往上加载更早的楼层」。
   Widget _buildLoadPreviousFloors(BuildContext context, ColorScheme scheme) {
@@ -902,6 +932,9 @@ class _ThreadPageState extends State<ThreadPage> {
                     onAgreeTap: () =>
                         _togglePostAgree(_firstFloor!, isFirst: true),
                     onReplyTap: () => _openReplyEditor(),
+                    // 主楼也走同一套楼层菜单，否则「复制 / 举报」只有楼层能用。
+                    onCopyTap: () => _copyPost(_firstFloor!),
+                    onMoreTap: () => _showPostActions(_firstFloor!),
                     onLinkTap: (url) => openTiebaUrl(context, url),
                     onAtTap: (uid, name) =>
                         openUserProfile(context, uid: uid, initialName: name),
@@ -1019,6 +1052,7 @@ class _ThreadPageState extends State<ThreadPage> {
                         : null,
                     onAgreeTap: () => _togglePostAgree(post, isFirst: false),
                     onReplyTap: () => _openReplyEditor(quotePost: post),
+                    onCopyTap: () => _copyPost(post),
                     onSubPostsTap: () => openSubPosts(
                       context,
                       threadId: widget.threadId,
