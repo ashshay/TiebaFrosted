@@ -419,6 +419,9 @@ class _FeedPageState extends State<FeedPage> {
       ),
       body: ChromeScrollListener(
         onHiddenChanged: chrome.setHidden,
+        enabled: context.select<FrostedSettings, bool>(
+          (s) => s.autoHideBars,
+        ),
         child: FrostedRefresh(
           topInset: pageTopInset(context),
           onRefresh: _refreshCurrentTab,

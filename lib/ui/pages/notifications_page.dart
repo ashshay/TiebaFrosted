@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
 import '../../data/repo.dart';
+import '../../data/settings.dart';
 import '../../data/store.dart';
 import '../../data/tab_cache.dart';
 import '../chrome.dart';
@@ -287,6 +288,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
       ),
       body: ChromeScrollListener(
         onHiddenChanged: chrome.setHidden,
+        enabled: context.select<FrostedSettings, bool>(
+          (s) => s.autoHideBars,
+        ),
         child: FrostedRefresh(
           topInset: top,
           onRefresh: () => _load(_tab, refresh: true),

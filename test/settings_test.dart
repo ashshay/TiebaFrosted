@@ -127,6 +127,31 @@ void main() {
     expect(settings.predictiveBack, isTrue);
   });
 
+  testWidgets('使用习惯里的「自动隐藏顶栏底栏」开关会落盘', (tester) async {
+    final settings = await bootApp(tester);
+    expect(settings.autoHideBars, isTrue);
+
+    final navContext = tester.element(find.text('首页'));
+    openSettingsHabit(navContext);
+    await tester.pumpAndSettle();
+
+    final row = find.text('滚动时自动隐藏顶栏与底栏');
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(settings.autoHideBars, isFalse);
+    expect(
+      (await SharedPreferences.getInstance()).getBool('auto_hide_bars'),
+      isFalse,
+    );
+
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(settings.autoHideBars, isTrue);
+  });
+
   testWidgets('SettingsThemePage controls all update theme and liquid glass', (
     tester,
   ) async {

@@ -867,6 +867,7 @@ class _ThreadPageState extends State<ThreadPage> {
         onPageTap: _showThreadActions,
       ),
       body: ChromeScrollListener(
+        enabled: settings.autoHideBars,
         onHiddenChanged: (hidden) {
           if (mounted && hidden != _barHidden) {
             setState(() => _barHidden = hidden);

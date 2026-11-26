@@ -207,6 +207,9 @@ class _HomePageState extends State<HomePage> {
       ),
       body: ChromeScrollListener(
         onHiddenChanged: chrome.setHidden,
+        enabled: context.select<FrostedSettings, bool>(
+          (s) => s.autoHideBars,
+        ),
         child: FrostedRefresh(
           topInset: pageTopInset(context),
           onRefresh: _loadForums,

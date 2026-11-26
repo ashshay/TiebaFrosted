@@ -73,6 +73,9 @@ class FrostedSettings extends ChangeNotifier {
   /// 动态页左右滑动切换「推荐 / 关注 / 热榜」。
   bool swipeSwitchFeed = true;
 
+  /// 滚动时自动收起顶栏与底栏（关掉后两只栏常驻）。
+  bool autoHideBars = true;
+
   /// 首页顶部显示「经过贴吧」横滑条。
   bool homeShowHistoryForum = true;
 
@@ -152,6 +155,7 @@ class FrostedSettings extends ChangeNotifier {
     hideMedia = _prefs.getBool('hide_media') ?? false;
     forumListSingle = _prefs.getBool('forum_list_single') ?? false;
     swipeSwitchFeed = _prefs.getBool('swipe_switch_feed') ?? true;
+    autoHideBars = _prefs.getBool('auto_hide_bars') ?? true;
     homeShowHistoryForum = _prefs.getBool('home_show_history_forum') ?? true;
     useWebView = _prefs.getBool('use_webview') ?? true;
     predictiveBack = _prefs.getBool('predictive_back') ?? true;
@@ -349,6 +353,13 @@ class FrostedSettings extends ChangeNotifier {
     predictiveBack = value;
     notifyListeners();
     await _prefs.setBool('predictive_back', value);
+  }
+
+  Future<void> setAutoHideBars(bool value) async {
+    if (autoHideBars == value) return;
+    autoHideBars = value;
+    notifyListeners();
+    await _prefs.setBool('auto_hide_bars', value);
   }
 
   Future<void> setStartTab(int value) async {

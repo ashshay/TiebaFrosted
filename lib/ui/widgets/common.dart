@@ -423,11 +423,15 @@ class ChromeScrollListener extends StatefulWidget {
     required this.onHiddenChanged,
     required this.child,
     this.hideAfterPixels = 240.0,
+    this.enabled = true,
   });
 
   final ValueChanged<bool> onHiddenChanged;
   final Widget child;
   final double hideAfterPixels;
+
+  /// 关闭后不再随滚动收起顶栏与底栏（设置里的「滚动时自动隐藏顶栏与底栏」）。
+  final bool enabled;
 
   @override
   State<ChromeScrollListener> createState() => _ChromeScrollListenerState();
@@ -436,7 +440,18 @@ class ChromeScrollListener extends StatefulWidget {
 class _ChromeScrollListenerState extends State<ChromeScrollListener> {
   double _lastPixels = 0;
 
+  @override
+  void didUpdateWidget(ChromeScrollListener oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 开关一关就立刻把栏放回来，不用等下一次滚动。
+    if (oldWidget.enabled && !widget.enabled) widget.onHiddenChanged(false);
+  }
+
   bool _onNotification(ScrollNotification notification) {
+    if (!widget.enabled) {
+      widget.onHiddenChanged(false);
+      return false;
+    }
     if (notification.metrics.axis != Axis.vertical) return false;
     if (notification is ScrollUpdateNotification) {
       final pixels = notification.metrics.pixels;

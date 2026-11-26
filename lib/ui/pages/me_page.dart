@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/models.dart';
 import '../../data/repo.dart';
+import '../../data/settings.dart';
 import '../../data/store.dart';
 import '../../data/tab_cache.dart';
 import '../chrome.dart';
@@ -98,6 +99,9 @@ class _MePageState extends State<MePage> {
       bar: const ZeroAppBar(),
       body: ChromeScrollListener(
         onHiddenChanged: chrome.setHidden,
+        enabled: context.select<FrostedSettings, bool>(
+          (s) => s.autoHideBars,
+        ),
         child: FrostedRefresh(
           topInset: topInset + 12,
           onRefresh: _loadProfile,
@@ -502,6 +506,9 @@ class _GuestMeView extends StatelessWidget {
       ),
       body: ChromeScrollListener(
         onHiddenChanged: chrome.setHidden,
+        enabled: context.select<FrostedSettings, bool>(
+          (s) => s.autoHideBars,
+        ),
         child: LayoutBuilder(
           builder: (context, viewport) => SingleChildScrollView(
             key: const ValueKey('guest-me-page-scroll'),

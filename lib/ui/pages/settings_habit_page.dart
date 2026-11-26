@@ -126,6 +126,16 @@ class SettingsHabitPage extends StatelessWidget {
                 ),
               ),
               FrostedListRow(
+                title: const Text('滚动时自动隐藏顶栏与底栏'),
+                subtitle: const Text('向下浏览时收起两只栏，回滑或到顶时重新出现'),
+                trailing: Switch(
+                  value: settings.autoHideBars,
+                  onChanged: settings.setAutoHideBars,
+                ),
+                onPressed: () =>
+                    settings.setAutoHideBars(!settings.autoHideBars),
+              ),
+              FrostedListRow(
                 title: const Text('预测性返回手势'),
                 subtitle: const Text('从左边缘滑动时先预览上一页，松手才返回（Android 13+）'),
                 trailing: Switch(

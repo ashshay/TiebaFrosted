@@ -285,14 +285,22 @@ Future<void> openVideoPlayer(
   String title = '视频播放',
 }) => pushPage(context, VideoPage(videoUrl: videoUrl, title: title));
 
+/// 打开登录页。
+///
+/// 这里禁用侧滑返回：登录页主体是 WebView，百度在网页登录里会弹「转动验证码」，
+/// 需要左右拖动拼图；而卡片路由的侧滑返回是「页面上任意位置横拖即返回」，
+/// 会把验证码的拖动直接吃成返回，人被弹回上一页、登录页的进度也全丢。
+/// 需要退出时用左上角返回箭头或系统返回键。
 Future<bool?> openLogin(BuildContext context, {bool fresh = false}) =>
-    pushPage<bool>(context, LoginPage(fresh: fresh));
+    pushPage<bool>(context, LoginPage(fresh: fresh), dragBack: false);
 
 Future<void> openWeb(
   BuildContext context,
   String url, {
   String? title,
-}) => pushPage(context, WebPage(url: url, initialTitle: title));
+}) =>
+    // 同理：内置浏览器里的横向拖动（滑块、图片、站内控件）不该被识别成返回。
+    pushPage(context, WebPage(url: url, initialTitle: title), dragBack: false);
 
 Future<void> openSettings(BuildContext context) =>
     pushPage(context, const SettingsPage());
