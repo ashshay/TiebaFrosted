@@ -332,7 +332,14 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               SliverPadding(
-                padding: EdgeInsets.fromLTRB(14, 8, 14, bottom),
+                // 没有「经过贴吧」header 时，网格自己要让出顶栏高度，
+                // 否则前两行会被压在透明顶栏下面，且内容不足一屏时无法滚出来。
+                padding: EdgeInsets.fromLTRB(
+                  14,
+                  header != null ? 8 : top + 8,
+                  14,
+                  bottom,
+                ),
                 sliver: SliverGrid.builder(
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,

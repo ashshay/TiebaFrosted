@@ -146,4 +146,15 @@ abstract final class NativeChannels {
       return false;
     }
   }
+
+  static Future<bool> shareImage(
+    Uint8List bytes, {
+    required String name,
+  }) async {
+    final ok = await _share.invokeMethod<bool>('shareImage', {
+      'bytes': bytes,
+      'name': name,
+    });
+    return ok ?? false;
+  }
 }

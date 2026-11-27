@@ -13,7 +13,7 @@ class MediaSaver {
 
   final Dio _dio;
 
-  Future<String> saveImageFromUrl(String url) async {
+  Future<({Uint8List bytes, String name})> _loadImagePayload(String url) async {
     final normalized = normalizeTiebaImageUrl(url);
     Uint8List bytes;
     try {
@@ -31,7 +31,17 @@ class MediaSaver {
     if (bytes.isEmpty) throw StateError('下载图片为空');
     final ext = _guessExt(normalized, defaultExt: 'jpg');
     final name = 'tiebafrosted_${DateTime.now().millisecondsSinceEpoch}.$ext';
-    return NativeChannels.saveImage(bytes, name: name);
+    return (bytes: bytes, name: name);
+  }
+
+  Future<String> saveImageFromUrl(String url) async {
+    final payload = await _loadImagePayload(url);
+    return NativeChannels.saveImage(payload.bytes, name: payload.name);
+  }
+
+  Future<bool> shareImageFromUrl(String url) async {
+    final payload = await _loadImagePayload(url);
+    return NativeChannels.shareImage(payload.bytes, name: payload.name);
   }
 
   Future<String> saveVideoFromUrl(String url) async {

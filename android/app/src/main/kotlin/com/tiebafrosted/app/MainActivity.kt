@@ -2,6 +2,7 @@ package com.tiebafrosted.app
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,6 +12,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.CookieManager
 import android.webkit.WebStorage
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -147,6 +149,19 @@ class MainActivity : FlutterActivity() {
                         val subject = call.argument<String>("subject")
                         result.success(shareText(text, subject))
                     }
+                    "shareImage" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val name = call.argument<String>("name") ?: defaultName("jpg")
+                        if (bytes == null || bytes.isEmpty()) {
+                            result.error("share_failed", "图片内容为空", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            result.success(shareImage(bytes, name))
+                        } catch (t: Throwable) {
+                            result.error("share_failed", t.message ?: "分享图片失败", null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -234,6 +249,36 @@ class MainActivity : FlutterActivity() {
         } catch (_: Throwable) {
             false
         }
+    }
+
+    private fun shareImage(bytes: ByteArray, name: String): Boolean {
+        val shareDir = File(cacheDir, "share").apply { mkdirs() }
+        val cutoff = System.currentTimeMillis() - 10 * 60 * 1000L
+        shareDir.listFiles()?.forEach { old ->
+            if (old.isFile && old.lastModified() < cutoff) {
+                old.delete()
+            }
+        }
+        val safeName = File(name).name.ifBlank { defaultName("jpg") }
+        val outFile = File(shareDir, safeName)
+        outFile.writeBytes(bytes)
+
+        val ext = safeName.substringAfterLast('.', "jpg").lowercase()
+        val mime = when (ext) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            else -> "image/jpeg"
+        }
+        val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", outFile)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri("", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "分享图片"))
+        return true
     }
 
     private fun saveToGallery(result: MethodChannel.Result, action: () -> String) {

@@ -9,7 +9,7 @@ Future<T?> pushPage<T>(
   bool dragBack = true,
 }) {
   return Navigator.of(context).push<T>(
-    CardPageRoute<T>(
+    _FrostedCardPageRoute<T>(
       builder: (_) => PredictiveBackHost(child: page),
       dragBackEnabled: dragBack,
     ),
@@ -20,7 +20,7 @@ Future<T?> pushPage<T>(
 Future<T?> pushLightboxPage<T>(BuildContext context, Widget page) {
   final disableAnim = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
   return Navigator.of(context).push<T>(
-    PageRouteBuilder<T>(
+    _FrostedLightboxRoute<T>(
       opaque: false,
       barrierColor: null,
       transitionDuration: disableAnim
@@ -51,3 +51,52 @@ Future<T?> pushLightboxPage<T>(BuildContext context, Widget page) {
 
 Future<T?> openDialog<T>(BuildContext context, Widget child) =>
     showFloatingDialog<T>(context: context, child: child);
+
+/// 覆写预测性返回的提交 / 取消收尾：
+///
+/// Flutter 默认的 [TransitionRoute.handleCommitBackGesture] 会在 `navigator.pop()`
+/// 后强行调用 `controller.reverse(from: 1.0)`，既把已滑出的卡片跳回起点，又把
+/// [CardRouteMixin.didPop] 的 300ms 弹簧替换成 ~550ms 线性匀速退场；
+/// 取消手势时的 `controller.forward()` 同样走线性长时长。这里直接沿用
+/// [CardRouteMixin.settleTo] 的弹簧从当前进度收尾。
+class _FrostedCardPageRoute<T> extends CardPageRoute<T> {
+  _FrostedCardPageRoute({required super.builder, super.dragBackEnabled});
+
+  @override
+  void handleCommitBackGesture() {
+    if (isCurrent) {
+      navigator?.pop();
+    }
+    navigator?.didStopUserGesture();
+  }
+
+  @override
+  void handleCancelBackGesture() {
+    final ctrl = controller;
+    if (isCurrent && ctrl != null && !ctrl.isCompleted) {
+      settleTo(1);
+    }
+    navigator?.didStopUserGesture();
+  }
+}
+
+/// 看图器路由的预测性返回提交：直接从当前进度 pop 淡出，避免默认实现
+/// `reverse(from: 1.0)` 造成画面先闪回不透明再退出。
+class _FrostedLightboxRoute<T> extends PageRouteBuilder<T> {
+  _FrostedLightboxRoute({
+    required super.pageBuilder,
+    required super.transitionsBuilder,
+    super.transitionDuration,
+    super.reverseTransitionDuration,
+    super.opaque,
+    super.barrierColor,
+  });
+
+  @override
+  void handleCommitBackGesture() {
+    if (isCurrent) {
+      navigator?.pop();
+    }
+    navigator?.didStopUserGesture();
+  }
+}

@@ -29,6 +29,7 @@ class PredictiveBackHost extends StatefulWidget {
 class _PredictiveBackHostState extends State<PredictiveBackHost>
     with WidgetsBindingObserver {
   ModalRoute<dynamic>? _route;
+  bool _gestureActive = false;
 
   bool get _enabled =>
       widget.enabled ??
@@ -49,6 +50,10 @@ class _PredictiveBackHostState extends State<PredictiveBackHost>
 
   @override
   void dispose() {
+    if (_gestureActive) {
+      _gestureActive = false;
+      _route?.handleCancelBackGesture();
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -63,6 +68,7 @@ class _PredictiveBackHostState extends State<PredictiveBackHost>
         !route.popGestureEnabled) {
       return false;
     }
+    _gestureActive = true;
     // 手势进度是「已返回多少」，路由动画是「页面还在多少」，两者互补。
     route.handleStartBackGesture(progress: 1 - backEvent.progress);
     return true;
@@ -70,14 +76,23 @@ class _PredictiveBackHostState extends State<PredictiveBackHost>
 
   @override
   void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
+    if (!_gestureActive) return;
     _route?.handleUpdateBackGestureProgress(progress: 1 - backEvent.progress);
   }
 
   @override
-  void handleCommitBackGesture() => _route?.handleCommitBackGesture();
+  void handleCommitBackGesture() {
+    if (!_gestureActive) return;
+    _gestureActive = false;
+    _route?.handleCommitBackGesture();
+  }
 
   @override
-  void handleCancelBackGesture() => _route?.handleCancelBackGesture();
+  void handleCancelBackGesture() {
+    if (!_gestureActive) return;
+    _gestureActive = false;
+    _route?.handleCancelBackGesture();
+  }
 
   @override
   Widget build(BuildContext context) => widget.child;

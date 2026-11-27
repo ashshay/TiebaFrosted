@@ -42,6 +42,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
   final Set<int> _originIndexes = {};
   final ValueNotifier<double> _backdropAlpha = ValueNotifier<double>(1.0);
   bool _saving = false;
+  bool _sharing = false;
   bool _pageLocked = false;
 
   @override
@@ -113,6 +114,26 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
     }
   }
 
+  Future<void> _shareCurrent() async {
+    if (_sharing || widget.images.isEmpty) return;
+    setState(() => _sharing = true);
+    try {
+      final url = _current.originUrl.isNotEmpty
+          ? _current.originUrl
+          : _current.url;
+      final ok = await context.read<MediaSaver>().shareImageFromUrl(url);
+      if (!ok && mounted) {
+        showFrostedToast(context, '分享图片失败', level: BannerLevel.error);
+      }
+    } on Object catch (e) {
+      if (mounted) {
+        showFrostedToast(context, cleanError(e), level: BannerLevel.error);
+      }
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
   Future<void> _showActions() async {
     HapticFeedback.mediumImpact();
     final picked = await showFrostedChoices<String>(
@@ -120,6 +141,7 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
       title: '图片操作',
       choices: const [
         FrostedChoice(value: 'save', label: '保存到相册'),
+        FrostedChoice(value: 'share', label: '分享图片'),
         FrostedChoice(value: 'origin', label: '查看原图'),
         FrostedChoice(value: 'copy', label: '复制图片链接'),
       ],
@@ -128,6 +150,8 @@ class _ImageViewerPageState extends State<ImageViewerPage> {
     switch (picked) {
       case 'save':
         await _saveCurrent();
+      case 'share':
+        await _shareCurrent();
       case 'origin':
         setState(() => _originIndexes.add(_index));
       case 'copy':
