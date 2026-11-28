@@ -8,11 +8,13 @@ import 'package:provider/provider.dart';
 import '../../core/html_text.dart';
 import '../../data/models.dart';
 import '../../data/repo.dart';
+import '../../data/settings.dart';
 import '../routes.dart';
 import '../widgets/common.dart';
 import '../widgets/copy_dialog.dart';
 import '../widgets/glyphs.dart';
 import '../widgets/post_tile.dart';
+import '../widgets/press_scale.dart';
 import '../widgets/refresh.dart';
 import '../widgets/subpost_tile.dart';
 
@@ -57,6 +59,9 @@ class _SubPostsPageState extends State<SubPostsPage> {
   String _tbs = '';
   String? _error;
 
+  /// 下一页失败：底部显示重试入口，避免停在第一批回复上没有任何提示。
+  String? _loadMoreError;
+
   TiebaSubPost? _replyTarget;
 
   @override
@@ -77,14 +82,16 @@ class _SubPostsPageState extends State<SubPostsPage> {
     super.dispose();
   }
 
+  /// `pb/floor` 的 `has_more` 常年回 0，只有 `total_page` 是准的（例如 99 页）；
+  /// 只看 `has_more` 会让楼中楼永远停在前 30 条。
+  bool get _hasMore => _pageInfo.hasMoreAfter(_page);
+
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    if (_scroll.offset >= _scroll.position.maxScrollExtent - 300 &&
-        _pageInfo.hasMore &&
-        !_loading &&
-        !_loadingMore) {
-      unawaited(_load(refresh: false));
-    }
+    if (_scroll.offset < _scroll.position.maxScrollExtent - 300) return;
+    if (_loading || _loadingMore || _loadMoreError != null) return;
+    if (!_hasMore) return;
+    unawaited(_load(refresh: false));
   }
 
   Future<void> _load({required bool refresh}) async {
@@ -92,9 +99,13 @@ class _SubPostsPageState extends State<SubPostsPage> {
       setState(() {
         _loading = _subPosts.isEmpty;
         _error = null;
+        _loadMoreError = null;
       });
     } else {
-      setState(() => _loadingMore = true);
+      setState(() {
+        _loadingMore = true;
+        _loadMoreError = null;
+      });
     }
 
     try {
@@ -121,7 +132,11 @@ class _SubPostsPageState extends State<SubPostsPage> {
               if (seen.add(s.id)) s,
           ];
         }
-        _page = nextPage;
+        // 至少推进到刚请求的那一页：服务端回显旧页码时不至于反复拉同一页。
+        final echoed = res.page.currentPage;
+        _page = refresh
+            ? (echoed > 0 ? echoed : nextPage)
+            : (echoed > nextPage ? echoed : nextPage);
         _loading = false;
         _loadingMore = false;
       });
@@ -129,6 +144,7 @@ class _SubPostsPageState extends State<SubPostsPage> {
       if (!mounted) return;
       setState(() {
         _error = cleanError(e);
+        if (!refresh) _loadMoreError = _error;
         _loading = false;
         _loadingMore = false;
       });
@@ -196,11 +212,47 @@ class _SubPostsPageState extends State<SubPostsPage> {
   Future<void> _copySubPost(TiebaSubPost sub) =>
       showCopyTextDialog(context, richTextToPlainText(sub.content));
 
+  /// 下一页失败时的手动重试入口。
+  Widget _buildLoadMoreRetry(BuildContext context, ColorScheme scheme) {
+    return Center(
+      child: PressScale(
+        scale: 0.98,
+        child: FrostedTapSurface(
+          onPressed: () => unawaited(_load(refresh: false)),
+          pill: true,
+          fill: context.surfaceLevel.next.colorOf(scheme),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GlyphIcon(
+                  FrostedGlyphs.refresh,
+                  size: 14,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '加载失败，点击重试',
+                  style: AppTextStyle.footnote
+                      .of(context)
+                      .copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final floorNum = _parentPost?.floor ?? 0;
     final title = floorNum > 0 ? '$floorNum楼的回复' : '楼中楼';
     final scheme = context.colorScheme;
+    final settings = context.watch<FrostedSettings>();
+    final merged = settings.commentStyle == CommentStyle.merged;
     final bottom = MediaQuery.paddingOf(context).bottom;
 
     return FrostedPage(
@@ -327,16 +379,11 @@ class _SubPostsPageState extends State<SubPostsPage> {
                         )
                       else
                         SliverPadding(
-                          padding: EdgeInsets.fromLTRB(
-                            14,
-                            0,
-                            14,
-                            _loadingMore ? 0 : bottom + 96,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
                           sliver: SliverList.separated(
                             itemCount: _subPosts.length,
                             separatorBuilder: (_, _) =>
-                                const SizedBox(height: 8),
+                                SizedBox(height: merged ? 16 : 8),
                             itemBuilder: (context, i) {
                               final sub = _subPosts[i];
                               return SubPostTile(
@@ -370,18 +417,37 @@ class _SubPostsPageState extends State<SubPostsPage> {
                             },
                           ),
                         ),
-                      if (_loadingMore)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              14,
-                              16,
-                              14,
-                              bottom + 96,
-                            ),
-                            child: const FrostedLoading(),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            14,
+                            _loadingMore ? 16 : 8,
+                            14,
+                            bottom + 96,
                           ),
+                          child: _loadingMore
+                              ? const FrostedLoading()
+                              : _loadMoreError != null
+                              ? _buildLoadMoreRetry(context, scheme)
+                              : (!_hasMore && _subPosts.isNotEmpty)
+                              ? Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      '— 到底了 —',
+                                      style: AppTextStyle.caption1
+                                          .of(context)
+                                          .copyWith(
+                                            color: scheme.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
                         ),
+                      ),
                     ],
                   ),
       ),

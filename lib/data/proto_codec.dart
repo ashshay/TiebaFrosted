@@ -271,15 +271,22 @@ abstract final class TiebaProtoCodec {
       }
     });
 
+    /// 楼层把作者内嵌在 `Post.author` 时那份资料常缺 `ip_address`，
+    /// `user_list` 里同一 uid 才带发帖地；缺的字段从后者补。
+    TiebaUser resolveAuthor(TiebaUser author, int authorId) {
+      final known = usersById[author.id > 0 ? author.id : authorId];
+      final resolved = author.id > 0 ? author : (known ?? author);
+      if (known != null && resolved.ipAddress.isEmpty) {
+        return resolved.copyWith(ipAddress: known.ipAddress);
+      }
+      return resolved;
+    }
+
     TiebaPost hydratePost(TiebaPost p) {
-      final resolvedAuthor = p.author.id > 0
-          ? p.author
-          : (usersById[p.authorId] ?? p.author);
+      final resolvedAuthor = resolveAuthor(p.author, p.authorId);
       final resolvedSubs = [
         for (final s in p.subPosts)
-          s.author.id > 0
-              ? s
-              : s.copyWith(author: usersById[s.authorId] ?? s.author),
+          s.copyWith(author: resolveAuthor(s.author, s.authorId)),
       ];
       return p.copyWith(author: resolvedAuthor, subPosts: resolvedSubs);
     }

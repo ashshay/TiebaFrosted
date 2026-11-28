@@ -95,16 +95,20 @@ class TiebaUser {
     String? intro,
     String? nameShow,
     int? sex,
+    String? ipAddress,
+    int? levelId,
+    bool? isBawu,
+    String? portrait,
   }) => TiebaUser(
     id: id,
     name: name,
     nameShow: nameShow ?? this.nameShow,
-    portrait: portrait,
-    levelId: levelId,
+    portrait: portrait ?? this.portrait,
+    levelId: levelId ?? this.levelId,
     levelName: levelName,
-    isBawu: isBawu,
+    isBawu: isBawu ?? this.isBawu,
     bawuType: bawuType,
-    ipAddress: ipAddress,
+    ipAddress: ipAddress ?? this.ipAddress,
     tiebaUid: tiebaUid,
     sex: sex ?? this.sex,
     intro: intro ?? this.intro,
@@ -266,6 +270,17 @@ class TiebaPageInfo {
   final int newTotalPage;
 
   int get effectiveTotalPage => newTotalPage > 0 ? newTotalPage : totalPage;
+}
+
+extension TiebaPageInfoPaging on TiebaPageInfo {
+  /// 第 [page] 页之后还有没有下一页。
+  ///
+  /// `pb/floor` 的 `has_more` 常年回 0，但 `total_page` 是真实的 99 页；
+  /// 只看 `has_more` 会让楼中楼卡在第一批 30 条。所以页码与总页数也要参与判断。
+  bool hasMoreAfter(int page) {
+    if (page < 1) return hasMore;
+    return hasMore || page < effectiveTotalPage;
+  }
 }
 
 class ForumClassify {

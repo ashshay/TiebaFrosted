@@ -94,6 +94,9 @@ class _ThreadPageState extends State<ThreadPage> {
   bool _loadingMore = false;
   String? _error;
 
+  /// 加载下一页失败时的原因：给底部一个「点击重试」，别让用户以为楼层到底了。
+  String? _loadMoreError;
+
   @override
   void initState() {
     super.initState();
@@ -251,12 +254,13 @@ class _ThreadPageState extends State<ThreadPage> {
   /// 倒序是从最后一页往前翻，所以「还有没有下一批」得看剩下几页可以往回走，
   /// 而不是服务端在正序意义下报的 hasMore。
   bool get _hasMoreInDirection =>
-      _isDesc ? _currentPage > 1 : _pageInfo.hasMore;
+      _isDesc ? _currentPage > 1 : _pageInfo.hasMoreAfter(_currentPage);
 
   void _onScroll() {
     if (!_scroll.hasClients) return;
     if (_scroll.offset < _scroll.position.maxScrollExtent - 360) return;
-    if (_loading || _loadingMore || !_hasMoreInDirection) return;
+    if (_loading || _loadingMore || _loadMoreError != null) return;
+    if (!_hasMoreInDirection) return;
     unawaited(
       _load(page: _isDesc ? _currentPage - 1 : _currentPage + 1, reset: false),
     );
@@ -309,9 +313,13 @@ class _ThreadPageState extends State<ThreadPage> {
       setState(() {
         _loading = _posts.isEmpty;
         _error = null;
+        _loadMoreError = null;
       });
     } else {
-      setState(() => _loadingMore = true);
+      setState(() {
+        _loadingMore = true;
+        _loadMoreError = null;
+      });
     }
 
     try {
@@ -345,7 +353,10 @@ class _ThreadPageState extends State<ThreadPage> {
         }
         _currentPage = jumpFloorNum > 0
             ? page
-            : (res.page.currentPage > 0 ? res.page.currentPage : page);
+            : reset
+            ? (res.page.currentPage > 0 ? res.page.currentPage : page)
+            // 翻页时至少推进到刚请求的那一页，免得服务端回显旧页码后重复请求同一页。
+            : (res.page.currentPage > page ? res.page.currentPage : page);
         if (reset) {
           // 跳楼进来时可能落在中间某页，记住最早加载到哪一页。
           _lowestPage = jumpFloorNum > 0 ? page : 1;
@@ -367,6 +378,7 @@ class _ThreadPageState extends State<ThreadPage> {
       if (!mounted) return;
       setState(() {
         _error = cleanError(e);
+        if (!reset) _loadMoreError = _error;
         _loading = false;
         _loadingMore = false;
       });
@@ -730,6 +742,47 @@ class _ThreadPageState extends State<ThreadPage> {
   Future<void> _copyPost(TiebaPost post) =>
       showCopyTextDialog(context, _copyTextOf(post));
 
+  /// 下一页没加载出来时给一个可点的胶囊，别让用户以为楼层就到这里。
+  Widget _buildLoadMoreRetry(BuildContext context, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: PressScale(
+          scale: 0.98,
+          child: FrostedTapSurface(
+            onPressed: () {
+              final next = _isDesc ? _currentPage - 1 : _currentPage + 1;
+              if (next < 1) return;
+              unawaited(_load(page: next, reset: false));
+            },
+            pill: true,
+            fill: context.surfaceLevel.next.colorOf(scheme),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GlyphIcon(
+                    FrostedGlyphs.refresh,
+                    size: 14,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '加载失败，点击重试',
+                    style: AppTextStyle.footnote
+                        .of(context)
+                        .copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// 跳楼进来后，在楼层上方提示「还能往上加载更早的楼层」。
   Widget _buildLoadPreviousFloors(BuildContext context, ColorScheme scheme) {
     return Padding(
@@ -1036,7 +1089,11 @@ class _ThreadPageState extends State<ThreadPage> {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               sliver: SliverList.separated(
                 itemCount: _posts.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                separatorBuilder: (_, _) => SizedBox(
+                  height: settings.commentStyle == CommentStyle.merged
+                      ? 18
+                      : 10,
+                ),
                 itemBuilder: (context, i) {
                   final post = _posts[i];
                   final tile = PostTile(
@@ -1099,6 +1156,8 @@ class _ThreadPageState extends State<ThreadPage> {
                       padding: EdgeInsets.symmetric(vertical: 16),
                       child: FrostedLoading(),
                     )
+                  : _loadMoreError != null
+                  ? _buildLoadMoreRetry(context, scheme)
                   : (!_hasMoreInDirection && _posts.isNotEmpty)
                   ? Padding(
                       padding: const EdgeInsets.symmetric(vertical: 18),

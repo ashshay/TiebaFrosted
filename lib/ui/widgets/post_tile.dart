@@ -16,6 +16,9 @@ import 'remote_image.dart';
 import 'rich_text.dart';
 
 /// 帖子详情页单个楼层组件（支持楼主/吧务标签、富文本、楼中楼预览块、点赞 L2 动效与操作栏）。
+///
+/// 评论区有「卡片」与「融合」两种排版：卡片给每层一张 FrostedCard，融合把楼层
+/// 直接铺在页面上（头像 + 正文 + 时间/发帖地 + 点赞一行到底，楼中楼收进底部圆角条）。
 class PostTile extends StatelessWidget {
   const PostTile({
     super.key,
@@ -58,11 +61,26 @@ class PostTile extends StatelessWidget {
   final void Function(List<RichImageNode> images, int index)? onImageTap;
   final void Function(RichVideoNode video)? onVideoTap;
 
+  bool get _isLz => lzUserId > 0 && post.author.id == lzUserId;
+
+  /// 楼中楼总数：接口给的计数优先，缺失时退回已带下来的预览条数。
+  int get _subPostTotal =>
+      post.subPostNumber > 0 ? post.subPostNumber : post.subPosts.length;
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<FrostedSettings>();
+    // 首楼（主楼）始终是一张卡片：融合样式只改回复区。楼中楼页顶部那块
+    // 虽然也带 isFirstFloor，但它是被点开的普通楼层，仍跟随融合排版。
+    final keepCard = isFirstFloor && post.floor <= 1;
+    if (settings.commentStyle == CommentStyle.merged && !keepCard) {
+      return _buildMerged(context, settings);
+    }
+    return _buildCard(context, settings);
+  }
+
+  Widget _buildCard(BuildContext context, FrostedSettings settings) {
     final scheme = context.colorScheme;
-    final isLz = lzUserId > 0 && post.author.id == lzUserId;
     final showUsername = context.select<FrostedSettings, bool>(
       (s) => s.showBothUsernameAndNickname,
     );
@@ -112,7 +130,7 @@ class PostTile extends StatelessWidget {
                                   ),
                             ),
                           ),
-                          if (isLz) ...[
+                          if (_isLz) ...[
                             const SizedBox(width: 6),
                             const FrostedTag(label: '楼主'),
                           ],
@@ -167,136 +185,20 @@ class PostTile extends StatelessWidget {
             ),
             const SizedBox(height: 6),
           ],
-          GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onLongPress: onCopyTap == null
-                ? null
-                : () {
-                    HapticFeedback.selectionClick();
-                    onCopyTap!();
-                  },
-            child: TiebaRichContent(
-              nodes: post.content,
-              hideMedia: settings.hideMedia,
-              style: AppTextStyle.subheadline
-                  .of(context)
-                  .copyWith(color: scheme.onSurface),
-              onLinkTap: onLinkTap,
-              onAtTap: onAtTap,
-              onImageTap: onImageTap,
-              onVideoTap: onVideoTap,
-            ),
-          ),
+          _buildContent(context, settings, scheme, merged: false),
           if (!isFirstFloor &&
               (post.subPosts.isNotEmpty || post.subPostNumber > 0)) ...[
             const SizedBox(height: 10),
+            // 卡片内层的底色要取卡片这一层的下一级，所以取内层 context。
             Builder(
-              builder: (innerContext) {
-                final blockLevel = innerContext.surfaceLevel.next;
-                final blockBg = blockLevel.colorOf(scheme);
-                return FrostedTapSurface(
-                  onPressed: onSubPostsTap,
-                  radius: AppCorner.md,
-                  fill: blockBg,
-                  child: SurfaceScope(
-                    level: blockLevel,
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            for (var i = 0; i < post.subPosts.length; i++) ...[
-                              if (i > 0) const SizedBox(height: 6),
-                              _SubPostPreviewLine(
-                                sub: post.subPosts[i],
-                                lzUserId: lzUserId,
-                              ),
-                            ],
-                            if (post.subPostNumber > post.subPosts.length ||
-                                post.subPosts.isEmpty) ...[
-                              if (post.subPosts.isNotEmpty)
-                                const SizedBox(height: 6),
-                              Text(
-                                '查看全部 ${post.subPostNumber} 条回复',
-                                style: AppTextStyle.footnote
-                                    .of(innerContext)
-                                    .copyWith(
-                                      color: scheme.primary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
+              builder: (innerContext) =>
+                  _buildCardSubPosts(innerContext, scheme),
             ),
           ],
           const SizedBox(height: 10),
           Row(
             children: [
-              PressScale(
-                scale: 0.94,
-                enabled: onAgreeTap != null,
-                child: FrostedTapSurface(
-                  onPressed: onAgreeTap == null
-                      ? null
-                      : () {
-                          HapticFeedback.lightImpact();
-                          onAgreeTap!();
-                        },
-                  pill: true,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (context.disableAnimations)
-                          GlyphIcon(
-                            FrostedGlyphs.thumbUp,
-                            size: 16,
-                            color: post.agree.isAgreed
-                                ? scheme.error
-                                : scheme.onSurfaceVariant,
-                            fill: post.agree.isAgreed ? 1 : 0,
-                          )
-                        else
-                          IconTheme(
-                            data: IconThemeData(
-                              size: 16,
-                              color: post.agree.isAgreed
-                                  ? scheme.error
-                                  : scheme.onSurfaceVariant,
-                            ),
-                            child: AnimatedGlyph(
-                              glyph: FrostedGlyphs.thumbUp,
-                              filled: post.agree.isAgreed,
-                            ),
-                          ),
-                        const SizedBox(width: 5),
-                        CountRoll(
-                          text: post.agree.displayCount > 0
-                              ? formatCount(post.agree.displayCount)
-                              : '赞',
-                          style: AppTextStyle.footnote.of(context).copyWith(
-                            color: post.agree.isAgreed
-                                ? scheme.error
-                                : scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              _buildCardAgree(context, scheme),
               const SizedBox(width: 12),
               if (onReplyTap != null)
                 PressScale(
@@ -334,6 +236,355 @@ class PostTile extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// 融合样式：没有卡片底、没有独立操作栏，楼层像官方客户端一样贴在页面底色上。
+  Widget _buildMerged(BuildContext context, FrostedSettings settings) {
+    final scheme = context.colorScheme;
+    final showUsername = context.select<FrostedSettings, bool>(
+      (s) => s.showBothUsernameAndNickname,
+    );
+    final meta = joinMeta([
+      if (showUsername) post.author.atUserName,
+      if (post.time > 0) formatTiebaDay(post.time),
+      if (post.author.ipAddress.isNotEmpty) post.author.ipAddress,
+    ]);
+    final showSubPosts =
+        !isFirstFloor && _subPostTotal > 0 && onSubPostsTap != null;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: onMoreTap == null
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              onMoreTap!();
+            },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: onAuthorTap,
+              child: Avatar(url: post.author.portrait, size: 40),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: GestureDetector(
+                                onTap: onAuthorTap,
+                                child: Text(
+                                  post.author.displayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyle.body
+                                      .of(context)
+                                      .copyWith(
+                                        color: scheme.onSurface,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ),
+                            ),
+                            if (_isLz) ...[
+                              const SizedBox(width: 6),
+                              const FrostedTag(label: '楼主'),
+                            ],
+                            if (post.author.isBawu) ...[
+                              const SizedBox(width: 6),
+                              FrostedTag(label: '吧务', color: context.warning),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (onMoreTap != null) ...[
+                        const SizedBox(width: 4),
+                        _MergedMoreButton(onPressed: onMoreTap!),
+                      ],
+                    ],
+                  ),
+                  if (leadingTitle.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      leadingTitle,
+                      style: AppTextStyle.body
+                          .of(context)
+                          .copyWith(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  _buildContent(context, settings, scheme, merged: true),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (meta.isNotEmpty)
+                        Expanded(
+                          child: Text(
+                            meta,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyle.footnote
+                                .of(context)
+                                .copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        )
+                      else
+                        const Spacer(),
+                      const SizedBox(width: 8),
+                      _buildMergedAgree(context, scheme),
+                    ],
+                  ),
+                  if (showSubPosts) ...[
+                    const SizedBox(height: 10),
+                    _buildMergedSubPosts(context, scheme),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context,
+    FrostedSettings settings,
+    ColorScheme scheme, {
+    required bool merged,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: onCopyTap == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              onCopyTap!();
+            },
+      child: TiebaRichContent(
+        nodes: post.content,
+        hideMedia: settings.hideMedia,
+        style: (merged ? AppTextStyle.body : AppTextStyle.subheadline)
+            .of(context)
+            .copyWith(color: scheme.onSurface),
+        onLinkTap: onLinkTap,
+        onAtTap: onAtTap,
+        onImageTap: onImageTap,
+        onVideoTap: onVideoTap,
+      ),
+    );
+  }
+
+  Widget _buildCardSubPosts(BuildContext context, ColorScheme scheme) {
+    final blockLevel = context.surfaceLevel.next;
+    final blockBg = blockLevel.colorOf(scheme);
+    return FrostedTapSurface(
+      onPressed: onSubPostsTap,
+      radius: AppCorner.md,
+      fill: blockBg,
+      child: SurfaceScope(
+        level: blockLevel,
+        child: SizedBox(
+          width: double.infinity,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < post.subPosts.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 6),
+                  _SubPostPreviewLine(
+                    sub: post.subPosts[i],
+                    lzUserId: lzUserId,
+                  ),
+                ],
+                if (post.subPostNumber > post.subPosts.length ||
+                    post.subPosts.isEmpty) ...[
+                  if (post.subPosts.isNotEmpty) const SizedBox(height: 6),
+                  Text(
+                    '查看全部 ${post.subPostNumber} 条回复',
+                    style: AppTextStyle.footnote
+                        .of(context)
+                        .copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardAgree(BuildContext context, ColorScheme scheme) {
+    return PressScale(
+      scale: 0.94,
+      enabled: onAgreeTap != null,
+      child: FrostedTapSurface(
+        onPressed: onAgreeTap == null
+            ? null
+            : () {
+                HapticFeedback.lightImpact();
+                onAgreeTap!();
+              },
+        pill: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (context.disableAnimations)
+                GlyphIcon(
+                  FrostedGlyphs.thumbUp,
+                  size: 16,
+                  color: post.agree.isAgreed
+                      ? scheme.error
+                      : scheme.onSurfaceVariant,
+                  fill: post.agree.isAgreed ? 1 : 0,
+                )
+              else
+                IconTheme(
+                  data: IconThemeData(
+                    size: 16,
+                    color: post.agree.isAgreed
+                        ? scheme.error
+                        : scheme.onSurfaceVariant,
+                  ),
+                  child: AnimatedGlyph(
+                    glyph: FrostedGlyphs.thumbUp,
+                    filled: post.agree.isAgreed,
+                  ),
+                ),
+              const SizedBox(width: 5),
+              CountRoll(
+                text: post.agree.displayCount > 0
+                    ? formatCount(post.agree.displayCount)
+                    : '赞',
+                style: AppTextStyle.footnote
+                    .of(context)
+                    .copyWith(
+                      color: post.agree.isAgreed
+                          ? scheme.error
+                          : scheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 融合样式的点赞：文字在前、拇指在后，贴在同一行的右端。
+  Widget _buildMergedAgree(BuildContext context, ColorScheme scheme) {
+    final color = post.agree.isAgreed ? scheme.error : scheme.onSurfaceVariant;
+    return PressScale(
+      scale: 0.94,
+      enabled: onAgreeTap != null,
+      child: FrostedTapSurface(
+        onPressed: onAgreeTap == null
+            ? null
+            : () {
+                HapticFeedback.lightImpact();
+                onAgreeTap!();
+              },
+        pill: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '赞',
+                style: AppTextStyle.footnote.of(context).copyWith(color: color),
+              ),
+              if (post.agree.displayCount > 0) ...[
+                const SizedBox(width: 4),
+                CountRoll(
+                  text: formatCount(post.agree.displayCount),
+                  style: AppTextStyle.footnote
+                      .of(context)
+                      .copyWith(color: color),
+                ),
+              ],
+              const SizedBox(width: 5),
+              if (context.disableAnimations)
+                GlyphIcon(
+                  FrostedGlyphs.thumbUp,
+                  size: 17,
+                  color: color,
+                  fill: post.agree.isAgreed ? 1 : 0,
+                )
+              else
+                IconTheme(
+                  data: IconThemeData(size: 17, color: color),
+                  child: AnimatedGlyph(
+                    glyph: FrostedGlyphs.thumbUp,
+                    filled: post.agree.isAgreed,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMergedSubPosts(BuildContext context, ColorScheme scheme) {
+    return FrostedTapSurface(
+      onPressed: onSubPostsTap,
+      radius: AppCorner.md,
+      fill: context.surfaceLevel.next.colorOf(scheme),
+      child: SizedBox(
+        width: double.infinity,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: Text(
+            '查看全部 $_subPostTotal 条回复',
+            style: AppTextStyle.subheadline
+                .of(context)
+                .copyWith(color: scheme.primary, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 融合样式里紧凑的「…」按钮：图标外框只占 28dp，不把昵称行撑高。
+class _MergedMoreButton extends StatelessWidget {
+  const _MergedMoreButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: '更多操作',
+      iconSize: 16,
+      padding: EdgeInsets.zero,
+      icon: GlyphIcon(
+        FrostedGlyphs.more,
+        size: 16,
+        color: context.colorScheme.onSurfaceVariant,
       ),
     );
   }
@@ -402,10 +653,9 @@ class _SubPostPreviewLine extends StatelessWidget {
         children: [
           TextSpan(
             text: sub.author.displayName,
-            style: AppTextStyle.subheadline.of(context).copyWith(
-              color: scheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
+            style: AppTextStyle.subheadline
+                .of(context)
+                .copyWith(color: scheme.primary, fontWeight: FontWeight.w600),
           ),
           if (showUsername && sub.author.atUserName.isNotEmpty)
             TextSpan(

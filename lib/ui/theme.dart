@@ -130,3 +130,25 @@ String formatTiebaTime(int timestampSec, {DateTime? now}) {
   }
   return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
 }
+
+/// 融合样式评论区用的紧凑时间：与发帖地排在同一行，只留到天。
+///
+/// 今天给「HH:mm」，今年给「MM-DD」，跨年补年份；一小时内的相对时间与
+/// [formatTiebaTime] 保持一致。
+String formatTiebaDay(int timestampSec, {DateTime? now}) {
+  if (timestampSec <= 0) return '';
+  final ms = timestampSec > 100000000000 ? timestampSec : timestampSec * 1000;
+  final dt = DateTime.fromMillisecondsSinceEpoch(ms);
+  final current = now ?? DateTime.now();
+  final diff = current.difference(dt);
+  if (diff.inSeconds < 60 && diff.inSeconds >= 0) return '刚刚';
+  if (diff.inMinutes < 60 && diff.inMinutes >= 0) return '${diff.inMinutes}分钟前';
+  String two(int n) => n < 10 ? '0$n' : '$n';
+  if (dt.year == current.year) {
+    if (dt.month == current.month && dt.day == current.day) {
+      return '${two(dt.hour)}:${two(dt.minute)}';
+    }
+    return '${two(dt.month)}-${two(dt.day)}';
+  }
+  return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
+}

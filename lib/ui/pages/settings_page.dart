@@ -54,7 +54,7 @@ class SettingsPage extends StatelessWidget {
               FrostedListRow(
                 leading: const GlyphIcon(FrostedGlyphs.edit, size: 19),
                 title: const Text('自定义显示'),
-                subtitle: const Text('无图模式、隐藏回复、双昵称显示'),
+                subtitle: const Text('无图模式、隐藏回复、双昵称显示、评论区样式'),
                 trailing: const GlyphIcon(Glyphs.chevronForward, size: 16),
                 onPressed: () => openSettingsCustom(context),
               ),

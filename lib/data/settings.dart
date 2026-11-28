@@ -8,6 +8,9 @@ const int accentHueCycle = -1;
 /// 液态玻璃档位（关 / 标准 / 超高）。
 enum LiquidGlassLevel { off, standard, ultra }
 
+/// 帖子详情页评论区的楼层排版：卡片（每层一张卡）或融合（铺在页面上）。
+enum CommentStyle { card, merged }
+
 /// 清透液态玻璃底栏默认参数（0% 磨砂 + 100% 折射）。
 const double defaultDockFrostAmount = 0.0;
 const double defaultDockRefractionAmount = 1.0;
@@ -69,6 +72,9 @@ class FrostedSettings extends ChangeNotifier {
   bool hideMedia = false;
   /// 「进吧」页排列：false 为多列网格（原版默认），true 为单列列表。
   bool forumListSingle = false;
+
+  /// 评论区（帖子楼层）排版，默认沿用卡片。
+  CommentStyle commentStyle = CommentStyle.card;
 
   /// 动态页左右滑动切换「推荐 / 关注 / 热榜」。
   bool swipeSwitchFeed = true;
@@ -154,6 +160,10 @@ class FrostedSettings extends ChangeNotifier {
     hideReply = _prefs.getBool('hide_reply') ?? false;
     hideMedia = _prefs.getBool('hide_media') ?? false;
     forumListSingle = _prefs.getBool('forum_list_single') ?? false;
+    final commentIdx =
+        _prefs.getInt('comment_style') ?? CommentStyle.card.index;
+    commentStyle = CommentStyle
+        .values[commentIdx.clamp(0, CommentStyle.values.length - 1)];
     swipeSwitchFeed = _prefs.getBool('swipe_switch_feed') ?? true;
     autoHideBars = _prefs.getBool('auto_hide_bars') ?? true;
     homeShowHistoryForum = _prefs.getBool('home_show_history_forum') ?? true;
@@ -325,6 +335,13 @@ class FrostedSettings extends ChangeNotifier {
     forumListSingle = value;
     notifyListeners();
     await _prefs.setBool('forum_list_single', value);
+  }
+
+  Future<void> setCommentStyle(CommentStyle value) async {
+    if (commentStyle == value) return;
+    commentStyle = value;
+    notifyListeners();
+    await _prefs.setInt('comment_style', value.index);
   }
 
   Future<void> setSwipeSwitchFeed(bool value) async {
